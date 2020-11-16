@@ -1,0 +1,127 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.3.0
+  creationTimestamp: null
+  name: serviceinstances.services.cloud.sap.com
+spec:
+  group: services.cloud.sap.com
+  names:
+    kind: ServiceInstance
+    listKind: ServiceInstanceList
+    plural: serviceinstances
+    singular: serviceinstance
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: ServiceInstance is the Schema for the serviceinstances API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: ServiceInstanceSpec defines the desired state of ServiceInstance
+          properties:
+            externalName:
+              description: The name of the instance in Service Manager
+              type: string
+            labels:
+              additionalProperties:
+                items:
+                  type: string
+                type: array
+              description: Custom instance labels stored in Service Manager
+              type: object
+            parameters:
+              description: Provisioning parameters for the instance
+              type: object
+            serviceOfferingName:
+              description: The name of the service offering
+              type: string
+            servicePlanID:
+              description: The plan ID in case service offering and plan name are
+                ambiguous
+              type: string
+            servicePlanName:
+              description: The name of the service plan
+              type: string
+          required:
+          - externalName
+          - serviceOfferingName
+          - servicePlanName
+          type: object
+        status:
+          description: ServiceInstanceStatus defines the observed state of ServiceInstance
+          properties:
+            conditions:
+              description: Service instance conditions
+              items:
+                properties:
+                  lastTransitionTime:
+                    description: LastTransitionTime is the timestamp corresponding
+                      to the last status change of this condition.
+                    format: date-time
+                    type: string
+                  message:
+                    description: Message is a human readable description of the details
+                      of the last transition, complementing reason.
+                    type: string
+                  reason:
+                    description: Reason is a brief machine readable explanation for
+                      the condition's last transition.
+                    type: string
+                  status:
+                    description: Status of the condition, one of ('True', 'False',
+                      'Unknown').
+                    type: string
+                  type:
+                    description: Type of the condition, currently ('Ready').
+                    type: string
+                required:
+                - status
+                - type
+                type: object
+              type: array
+            instanceID:
+              description: The generated ID of the instance, will be automatically
+                filled once the instance is created
+              type: string
+            observedGeneration:
+              description: Last generation that was acted on
+              format: int64
+              type: integer
+            operationType:
+              description: The operation type (CREATE/UPDATE/DELETE) for ongoing operation
+              type: string
+            operationURL:
+              description: URL of ongoing operation for the service instance
+              type: string
+          required:
+          - conditions
+          type: object
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

@@ -1,0 +1,10 @@
+apiVersion: services.cloud.sap.com/v1alpha1
+kind: ServiceInstance
+metadata:
+  name: serviceinstance-sample-messi-20
+spec:
+  serviceOfferingName: a
+  externalName: serviceinstance-sample-messi-20
+  servicePlanName: a
+  servicePlanID: 97db635c-9156-4531-b305-ae316aeb6d9e
+
