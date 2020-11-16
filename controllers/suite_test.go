@@ -110,11 +110,10 @@ var _ = BeforeSuite(func(done Done) {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	//k8sManager.GetWebhookServer().Start()
-
 	err = (&servicesv1alpha1.ServiceInstance{}).SetupWebhookWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	// +kubebuilder:scaffold:webhook
 	go func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
