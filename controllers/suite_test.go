@@ -62,7 +62,7 @@ var _ = BeforeSuite(func(done Done) {
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
 		//KubeAPIServerFlags: append(envtest.DefaultKubeAPIServerFlags, "--admission-control=MutatingAdmissionWebhook"),
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			DirectoryPaths: []string{filepath.Join("..", "..", "config", "webhook")},
+			DirectoryPaths: []string{filepath.Join("..", "config", "webhook")},
 		},
 	}
 
