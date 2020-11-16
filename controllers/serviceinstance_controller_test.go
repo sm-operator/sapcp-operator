@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"context"
-	"github.wdf.sap.corp/i042428/sapcp-operator/api/v1alpha1"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"time"
 
 	. "github.com/onsi/ginkgo"

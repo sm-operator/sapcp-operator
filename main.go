@@ -26,8 +26,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	servicesv1alpha1 "github.wdf.sap.corp/i042428/sapcp-operator/api/v1alpha1"
-	"github.wdf.sap.corp/i042428/sapcp-operator/controllers"
+	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
+	"github.com/sm-operator/sapcp-operator/controllers"
 	// +kubebuilder:scaffold:imports
 )
 

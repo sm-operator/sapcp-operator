@@ -22,7 +22,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.wdf.sap.corp/i042428/sapcp-operator/internal/smclient/smclientfakes"
+	"github.com/sm-operator/sapcp-operator/internal/smclient/smclientfakes"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -34,8 +34,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.wdf.sap.corp/i042428/sapcp-operator/api/v1alpha1"
-	servicesv1alpha1 "github.wdf.sap.corp/i042428/sapcp-operator/api/v1alpha1"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
+	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
