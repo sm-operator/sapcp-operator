@@ -14,3 +14,4 @@ jobs:
     - name: "Tests"
       script:
         - make test
+        - goveralls -coverprofile profile.cov -service=travis-ci
