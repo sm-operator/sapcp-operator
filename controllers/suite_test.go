@@ -47,6 +47,11 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
+const (
+	timeout  = time.Second * 10
+	interval = time.Millisecond * 250
+)
+
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
@@ -143,7 +148,7 @@ var _ = BeforeSuite(func(done Done) {
 		}
 		conn.Close()
 		return nil
-	}).Should(Succeed())
+	}, timeout, interval).Should(Succeed())
 
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
