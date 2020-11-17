@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -42,7 +43,10 @@ var _ webhook.Defaulter = &ServiceBinding{}
 func (r *ServiceBinding) Default() {
 	servicebindinglog.Info("default", "name", r.Name)
 
-	// TODO(user): fill in your defaulting logic.
+	if len(r.Spec.ExternalName) == 0 {
+		servicebindinglog.Info("externalName not provided, defaulting to k8s name", "name", r.Name)
+		r.Spec.ExternalName = r.Name
+	}
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -54,7 +58,7 @@ var _ webhook.Validator = &ServiceBinding{}
 func (r *ServiceBinding) ValidateCreate() error {
 	servicebindinglog.Info("validate create", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object creation.
+	//TODO validate instance exist in same namespace - requires api client
 	return nil
 }
 
@@ -62,8 +66,20 @@ func (r *ServiceBinding) ValidateCreate() error {
 func (r *ServiceBinding) ValidateUpdate(old runtime.Object) error {
 	servicebindinglog.Info("validate update", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object update.
+	if r.specChanged(old) {
+		return fmt.Errorf("service binding spec cannot be modified after creation")
+	}
+
 	return nil
+}
+
+func (r *ServiceBinding) specChanged(old runtime.Object) bool {
+	oldBinding := old.(*ServiceBinding)
+	return r.Spec.ExternalName != oldBinding.Spec.ExternalName ||
+		r.Spec.ServiceInstanceName != oldBinding.Spec.ServiceInstanceName ||
+		// TODO labels
+		//r.Spec.Labels != oldBinding.Spec.Labels ||
+		r.Spec.Parameters != oldBinding.Spec.Parameters
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type

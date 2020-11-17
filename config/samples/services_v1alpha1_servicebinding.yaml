@@ -1,7 +1,7 @@
 apiVersion: services.cloud.sap.com/v1alpha1
 kind: ServiceBinding
 metadata:
-  name: eyaln-test-k8s-bindings-13
+  name: eyaln-test-k8s-demo-binding-1
 spec:
-  externalName: eyaln-test-k8s-bindings-13
-  serviceInstanceName: eyaln-test-k8s-instances-13
+  externalName: eyaln-test-k8s-demo-binding-1
+  serviceInstanceName: eyaln-test-k8s-demo-1

@@ -19,6 +19,7 @@ package controllers
 import (
 	"crypto/tls"
 	"fmt"
+	"github.com/sm-operator/sapcp-operator/internal"
 	"net"
 	"path/filepath"
 	"testing"
@@ -54,6 +55,7 @@ const (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var fakeClient *smclientfakes.FakeClient
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -69,7 +71,6 @@ var _ = BeforeSuite(func(done Done) {
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
-		//KubeAPIServerFlags: append(envtest.DefaultKubeAPIServerFlags, "--admission-control=MutatingAdmissionWebhook"),
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
 			DirectoryPaths: []string{filepath.Join("..", "config", "webhook")},
 		},
@@ -104,7 +105,7 @@ var _ = BeforeSuite(func(done Done) {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	fakeClient := &smclientfakes.FakeClient{}
+	fakeClient = &smclientfakes.FakeClient{}
 	fakeClient.ProvisionReturns("12345678", "", nil)
 
 	err = (&ServiceInstanceReconciler{
@@ -118,7 +119,19 @@ var _ = BeforeSuite(func(done Done) {
 	err = (&servicesv1alpha1.ServiceInstance{}).SetupWebhookWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	err = (&ServiceBindingReconciler{
+		Client:   k8sManager.GetClient(),
+		Scheme:   k8sManager.GetScheme(),
+		Log:      ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
+		SMClient: fakeClient,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&servicesv1alpha1.ServiceBinding{}).SetupWebhookWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	// +kubebuilder:scaffold:webhook
+
 	go func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
@@ -148,3 +161,11 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
+
+func isReady(resource internal.SAPCPResource) bool {
+	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == v1alpha1.ConditionTrue
+}
+
+func isFailed(resource internal.SAPCPResource) bool {
+	return len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == v1alpha1.ConditionTrue
+}
