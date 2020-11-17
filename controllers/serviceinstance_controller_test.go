@@ -46,10 +46,7 @@ var _ = XDescribe("ServiceInstance controller", func() {
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, instanceLookupKey, createdInstance)
-				if err != nil {
-					return false
-				}
-				return true
+				return err == nil
 			}, timeout, interval).Should(BeTrue())
 			// Let's make sure our Schedule string value was properly converted/handled.
 			Expect(createdInstance.Status.InstanceID).ToNot(BeEmpty())
