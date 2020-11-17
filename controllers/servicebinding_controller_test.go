@@ -150,17 +150,18 @@ var _ = Describe("ServiceBinding controller", func() {
 
 	AfterEach(func() {
 		if createdBinding != nil {
+			secretName := createdBinding.Status.SecretName
 			Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
-				if err != nil {
-					if apierrors.IsNotFound(err) {
-						return true
-					}
-				}
-
-				return false
+				return apierrors.IsNotFound(err)
 			}, timeout, interval).Should(BeTrue())
+			if len(secretName) > 0 {
+				Eventually(func() bool {
+					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: namespace}, &v1.Secret{})
+					return apierrors.IsNotFound(err)
+				}, timeout, interval).Should(BeTrue())
+			}
 
 			createdBinding = nil
 		}
