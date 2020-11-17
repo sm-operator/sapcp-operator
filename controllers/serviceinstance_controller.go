@@ -249,6 +249,68 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 		serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 
+		//if plan id is provided we need to validate it matches the given service plan name and service offering name
+		if len(serviceInstance.Spec.ServicePlanID) > 0 {
+			q := &smclient.Parameters{
+				FieldQuery: []string{fmt.Sprintf("id eq '%s'", serviceInstance.Spec.ServicePlanID)},
+			}
+			plans, err := smClient.ListPlans(q)
+			if err != nil {
+				log.Error(err, "failed to get service plan")
+				setFailureConditions(smTypes.CREATE, "unable to provision instance", serviceInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, err
+			} else if len(plans.ServicePlans) != 1 {
+				log.Info(fmt.Sprintf("found %v plans matching plan id %v", len(plans.ServicePlans), serviceInstance.Spec.ServicePlanID))
+				setFailureConditions(smTypes.CREATE, "unable to provision instance", serviceInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			} else if serviceInstance.Spec.ServicePlanName != plans.ServicePlans[0].Name {
+				setFailureConditions(smTypes.CREATE, "provided plan id does not match the provided plan name", serviceInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			}
+
+			q = &smclient.Parameters{
+				FieldQuery: []string{fmt.Sprintf("id eq '%s'", plans.ServicePlans[0].ServiceOfferingID)},
+			}
+			offerings, err := smClient.ListOfferings(q)
+			if err != nil {
+				log.Error(err, fmt.Sprintf("failed to get service offering with id %s", plans.ServicePlans[0].ServiceOfferingID))
+				setFailureConditions(smTypes.CREATE, "unable to provision instance", serviceInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, err
+			} else if len(offerings.ServiceOfferings) != 1 {
+				log.Info(fmt.Sprintf("found %v offering matching offering id %v", len(offerings.ServiceOfferings), plans.ServicePlans[0].ServiceOfferingID))
+				setFailureConditions(smTypes.CREATE, "unable to provision instance", serviceInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			} else if serviceInstance.Spec.ServiceOfferingName != offerings.ServiceOfferings[0].Name {
+				setFailureConditions(smTypes.CREATE, "provided plan id does not match the provided offering name", serviceInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			}
+
+		}
+
 		instanceParameters, err := getInstanceParameters(serviceInstance)
 		if err != nil {
 			log.Error(err, "failed to parse instance parameters")
