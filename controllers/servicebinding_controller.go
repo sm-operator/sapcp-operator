@@ -23,8 +23,8 @@ import (
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
-	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	config2 "github.com/sm-operator/sapcp-operator/internal/config"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
+	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	corev1 "k8s.io/api/core/v1"
@@ -63,7 +63,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	// your logic here
 
-	serviceBinding := &servicesv1alpha1.ServiceBinding{}
+	serviceBinding := &v1alpha1.ServiceBinding{}
 	if err := r.Get(ctx, req.NamespacedName, serviceBinding); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch ServiceBinding")
@@ -100,7 +100,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		case string(smTypes.IN_PROGRESS):
 			fallthrough
 		case string(smTypes.PENDING):
-			return ctrl.Result{Requeue: true, RequeueAfter: config2.Get().PollInterval}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
 		case string(smTypes.FAILED):
 			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceBinding)
 			break
@@ -120,7 +120,13 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 			setSuccessConditions(smTypes.OperationCategory(status.Type), serviceBinding)
 			if serviceBinding.Status.OperationType == smTypes.DELETE {
-				// delete was successful - remove our finalizer from the list and update it.
+				// delete was successful - delete the secret
+				// TODO extract deletion of the secert and removal of finalizer to common function
+				if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+					return ctrl.Result{}, err
+				}
+
+				//remove our finalizer from the list and update it.
 				if err = r.removeFinalizer(ctx, serviceBinding, log); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -139,6 +145,11 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if isDelete(serviceBinding.ObjectMeta) {
 		if containsString(serviceBinding.Finalizers, bindingFinalizerName) {
 			if len(serviceBinding.Status.BindingID) == 0 {
+				// make sure there's no secret stored for the binding
+				if err := r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+					return ctrl.Result{}, err
+				}
+
 				log.Info("Binding does not exists in SM, removing finalizer")
 				if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
 					log.Error(err, "failed to remove finalizer")
@@ -162,6 +173,11 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 					serviceBinding.Status.BindingID = ""
 					setSuccessConditions(smTypes.DELETE, serviceBinding)
 					if err := r.Status().Update(ctx, serviceBinding); err != nil {
+						return ctrl.Result{}, err
+					}
+
+					// delete binding secret if exist
+					if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
 						return ctrl.Result{}, err
 					}
 
@@ -198,12 +214,16 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 					return ctrl.Result{}, err
 				}
 
-				return ctrl.Result{Requeue: true, RequeueAfter: config2.Get().PollInterval}, nil
+				return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
 			} else {
 				log.Info("Binding was deleted successfully")
 				serviceBinding.Status.BindingID = ""
 				setSuccessConditions(smTypes.DELETE, serviceBinding)
 				if err := r.Status().Update(ctx, serviceBinding); err != nil {
+					return ctrl.Result{}, err
+				}
+
+				if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
 					return ctrl.Result{}, err
 				}
 
@@ -263,7 +283,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{Requeue: true, RequeueAfter: config2.Get().SyncPeriod}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: config.Get().SyncPeriod}, nil
 	} else if serviceNotUsable(serviceInstance) {
 		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name)
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
@@ -274,7 +294,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				return ctrl.Result{}, err
 			}
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: config2.Get().SyncPeriod}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: config.Get().SyncPeriod}, nil
 	}
 
 	if serviceBinding.Status.BindingID == "" {
@@ -298,7 +318,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		bindings, err := smClient.ListBindings(&parameters)
 		if err != nil {
 			log.Error(err, "failed to list bindings in SM")
-			return ctrl.Result{Requeue: true, RequeueAfter: config2.Get().SyncPeriod}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().SyncPeriod}, nil
 		}
 		if bindings != nil && len(bindings.ServiceBindings) == 1 {
 
@@ -380,7 +400,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				return ctrl.Result{}, fmt.Errorf("failed to extract smBinding ID from operation URL %s", operationURL)
 			}
 
-			return ctrl.Result{Requeue: true, RequeueAfter: config2.Get().PollInterval}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
 		} else {
 			log.Info("Binding created successfully")
 
@@ -410,7 +430,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceBindingReconciler) SetOwner(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, serviceBinding *servicesv1alpha1.ServiceBinding, log logr.Logger) error {
+func (r *ServiceBindingReconciler) SetOwner(ctx context.Context, serviceInstance *v1alpha1.ServiceInstance, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) error {
 	if err := controllerutil.SetControllerReference(serviceInstance, serviceBinding, r.Scheme); err != nil {
 		log.Error(err, fmt.Sprintf("Could not update the smBinding %s owner instance reference", serviceBinding.Name))
 		return err
@@ -422,12 +442,12 @@ func (r *ServiceBindingReconciler) SetOwner(ctx context.Context, serviceInstance
 	return nil
 }
 
-func serviceNotUsable(instance *servicesv1alpha1.ServiceInstance) bool {
+func serviceNotUsable(instance *v1alpha1.ServiceInstance) bool {
 	return isDelete(instance.ObjectMeta) || instance.Status.Conditions[0].Reason == "createFailed"
 }
 
-func serviceInProgress(instance *servicesv1alpha1.ServiceInstance) bool {
-	if instance.Status.InstanceID != "" && len(instance.Status.Conditions) == 1 && instance.Status.Conditions[0].Status == servicesv1alpha1.ConditionFalse {
+func serviceInProgress(instance *v1alpha1.ServiceInstance) bool {
+	if instance.Status.InstanceID != "" && len(instance.Status.Conditions) == 1 && instance.Status.Conditions[0].Status == v1alpha1.ConditionFalse {
 		// instance is in progress
 		return true
 	}
@@ -440,8 +460,8 @@ func serviceInProgress(instance *servicesv1alpha1.ServiceInstance) bool {
 	return false
 }
 
-func (r *ServiceBindingReconciler) getServiceInstanceForBinding(ctx context.Context, binding *servicesv1alpha1.ServiceBinding) (*servicesv1alpha1.ServiceInstance, error) {
-	serviceInstance := &servicesv1alpha1.ServiceInstance{}
+func (r *ServiceBindingReconciler) getServiceInstanceForBinding(ctx context.Context, binding *v1alpha1.ServiceBinding) (*v1alpha1.ServiceInstance, error) {
+	serviceInstance := &v1alpha1.ServiceInstance{}
 	if err := r.Get(ctx, types.NamespacedName{Name: binding.Spec.ServiceInstanceName, Namespace: binding.Namespace}, serviceInstance); err != nil {
 		return nil, err
 	}
@@ -451,7 +471,7 @@ func (r *ServiceBindingReconciler) getServiceInstanceForBinding(ctx context.Cont
 
 func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&servicesv1alpha1.ServiceBinding{}).
+		For(&v1alpha1.ServiceBinding{}).
 		Complete(r)
 }
 
@@ -463,7 +483,7 @@ func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Log
 	}
 }
 
-func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *servicesv1alpha1.ServiceBinding, log logr.Logger) error {
+func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
 	log.Info("removing finalizer")
 	binding.Finalizers = removeString(binding.Finalizers, bindingFinalizerName)
 	if err := r.Update(ctx, binding); err != nil {
@@ -472,7 +492,7 @@ func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding 
 	return nil
 }
 
-func (r *ServiceBindingReconciler) addFinalizer(ctx context.Context, binding *servicesv1alpha1.ServiceBinding) error {
+func (r *ServiceBindingReconciler) addFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding) error {
 	binding.Finalizers = append(binding.Finalizers, bindingFinalizerName)
 	if err := r.Update(ctx, binding); err != nil {
 		return err
@@ -480,7 +500,7 @@ func (r *ServiceBindingReconciler) addFinalizer(ctx context.Context, binding *se
 	return nil
 }
 
-func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *servicesv1alpha1.ServiceBinding, smBinding smclientTypes.ServiceBinding, serviceInstance *servicesv1alpha1.ServiceInstance) {
+func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.ServiceBinding, smBinding smclientTypes.ServiceBinding, serviceInstance *v1alpha1.ServiceInstance) {
 	//set observed generation to 0 because we dont know which generation the current state in SM represents
 	k8sBinding.Status.ObservedGeneration = 0
 	k8sBinding.Status.BindingID = smBinding.ID
@@ -502,7 +522,7 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *servicesv1alp
 	}
 }
 
-func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBinding *servicesv1alpha1.ServiceBinding, smBinding *smclientTypes.ServiceBinding, log logr.Logger) error {
+func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBinding *v1alpha1.ServiceBinding, smBinding *smclientTypes.ServiceBinding, log logr.Logger) error {
 	logger := log.WithValues("bindingName", k8sBinding.Name, "secretName", k8sBinding.Name)
 
 	credentialsMap, err := normalizeCredentials(smBinding.Credentials)
@@ -531,7 +551,30 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 	return nil
 }
 
-func getBindingParameters(binding *servicesv1alpha1.ServiceBinding) (json.RawMessage, error) {
+func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
+	bindingSecert := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: binding.Namespace,
+		Name:      binding.Status.SecretName,
+	}, bindingSecert); err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "unable to fetch binding secret")
+			return err
+		} else {
+			// secret not found, nothing more to do
+			return nil
+		}
+	}
+
+	if err := r.Delete(ctx, bindingSecert); err != nil {
+		log.Error(err, "Failed to delete binding secret")
+		return err
+	}
+
+	return nil
+}
+
+func getBindingParameters(binding *v1alpha1.ServiceBinding) (json.RawMessage, error) {
 	var instanceParameters json.RawMessage
 	if binding.Spec.Parameters != nil {
 		parametersJSON, err := binding.Spec.Parameters.MarshalJSON()

@@ -73,7 +73,7 @@ func normalizeCredentials(credentialsJSON json.RawMessage) (map[string][]byte, e
 	return normalized, nil
 }
 
-func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SapCPController) {
+func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SAPCPResource) {
 	conditions := make([]*servicesv1alpha1.Condition, 0)
 
 	var defaultMessage, reason string
@@ -103,7 +103,7 @@ func setInProgressCondition(operationType smTypes.OperationCategory, message str
 	object.SetConditions(conditions)
 }
 
-func setSuccessConditions(operationType smTypes.OperationCategory, object internal.SapCPController) {
+func setSuccessConditions(operationType smTypes.OperationCategory, object internal.SAPCPResource) {
 	conditions := make([]*servicesv1alpha1.Condition, 0)
 
 	var message, reason string
@@ -128,13 +128,13 @@ func setSuccessConditions(operationType smTypes.OperationCategory, object intern
 	object.SetConditions(conditions)
 }
 
-func setFailureConditions(operationType smTypes.OperationCategory, errorMessage string, object internal.SapCPController) bool {
+func setFailureConditions(operationType smTypes.OperationCategory, errorMessage string, object internal.SAPCPResource) bool {
 	var message, reason string
 	if operationType == smTypes.CREATE {
-		message = fmt.Sprintf("%s create failed: %s",object.GetControllerName(), errorMessage)
+		message = fmt.Sprintf("%s create failed: %s", object.GetControllerName(), errorMessage)
 		reason = "createFailed"
 	} else if operationType == smTypes.UPDATE {
-		message = fmt.Sprintf("%s update failed: %s",object.GetControllerName(), errorMessage)
+		message = fmt.Sprintf("%s update failed: %s", object.GetControllerName(), errorMessage)
 		reason = "updateFailed"
 	} else if operationType == smTypes.DELETE {
 		message = fmt.Sprintf("%s deletion failed: %s", object.GetControllerName(), errorMessage)
@@ -182,7 +182,7 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 }
 
 func getSMClient(ctx context.Context, r client.Client, log logr.Logger) (smclient.Client, error) {
-	secretData, err  := getSMSecret(ctx, r, log, "default")
+	secretData, err := getSMSecret(ctx, r, log, "default")
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,3 @@ func getSMSecret(ctx context.Context, r client.Client, log logr.Logger, namespac
 
 	return secret.Data, nil
 }
-
-
-
-

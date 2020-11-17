@@ -31,6 +31,8 @@ type ServiceBindingSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// The k8s name of the service instance to bind, should be in the namespace of the binding
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	ServiceInstanceName string `json:"serviceInstanceName"`
 
 	// The name of the binding in Service Manager
@@ -87,7 +89,7 @@ type ServiceBinding struct {
 	Status ServiceBindingStatus `json:"status,omitempty"`
 }
 
-func (in *ServiceBinding) GetConditions() []*Condition{
+func (in *ServiceBinding) GetConditions() []*Condition {
 	return in.Status.Conditions
 }
 
@@ -95,7 +97,7 @@ func (in *ServiceBinding) SetConditions(conditions []*Condition) {
 	in.Status.Conditions = conditions
 }
 
-func (in *ServiceBinding) GetControllerName() string{
+func (in *ServiceBinding) GetControllerName() string {
 	return "ServiceBinding"
 }
 
