@@ -169,13 +169,11 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 				object.SetConditions([]*servicesv1alpha1.Condition{&readyCondition, &failedCondition})
 				return true
 			}
-			break
 		case servicesv1alpha1.ConditionFailed:
 			if conditionChanged(failedCondition, condition) {
 				object.SetConditions([]*servicesv1alpha1.Condition{&readyCondition, &failedCondition})
 				return true
 			}
-			break
 		}
 	}
 	return false

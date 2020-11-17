@@ -74,12 +74,6 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	//TODO webhook
-	externalName := serviceBinding.Spec.ExternalName
-	if len(externalName) == 0 {
-		externalName = serviceBinding.Name
-	}
-
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
 		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
@@ -492,13 +486,10 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *servicesv1alp
 		k8sBinding.Status.OperationURL = buildOperationURL(smBinding.LastOperation.ID, smBinding.ID, web.ServiceInstancesURL)
 		k8sBinding.Status.OperationType = smBinding.LastOperation.Type
 		setInProgressCondition(smBinding.LastOperation.Type, smBinding.LastOperation.Description, k8sBinding)
-		break
 	case smTypes.SUCCEEDED:
 		setSuccessConditions(smBinding.LastOperation.Type, k8sBinding)
-		break
 	case smTypes.FAILED:
 		setFailureConditions(smBinding.LastOperation.Type, smBinding.LastOperation.Description, k8sBinding)
-		break
 	}
 }
 
