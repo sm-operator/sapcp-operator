@@ -85,7 +85,7 @@ type ServiceInstance struct {
 	Status            ServiceInstanceStatus `json:"status,omitempty"`
 }
 
-func (in *ServiceInstance) GetConditions() []*Condition{
+func (in *ServiceInstance) GetConditions() []*Condition {
 	return in.Status.Conditions
 }
 
@@ -93,7 +93,7 @@ func (in *ServiceInstance) SetConditions(conditions []*Condition) {
 	in.Status.Conditions = conditions
 }
 
-func (in *ServiceInstance) GetControllerName() string{
+func (in *ServiceInstance) GetControllerName() string {
 	return "ServiceInstance"
 }
 
