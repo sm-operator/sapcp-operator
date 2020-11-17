@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"time"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -20,8 +18,6 @@ import (
 // +kubebuilder:docs-gen:collapse=Imports
 
 const (
-	timeout       = time.Second * 10
-	interval      = time.Millisecond * 250
 	fakeBindingID = "fake-binding-id"
 )
 
@@ -209,20 +205,47 @@ var _ = Describe("ServiceBinding controller", func() {
 		})
 
 		Context("Valid parameters", func() {
-			It("Should create binding and store the binding credentials in a secret", func() {
-				ctx := context.Background()
-				createdBinding = createBinding(ctx, bindingName, namespace, instanceName, "binding-external-name")
-				Expect(createdBinding.Spec.ExternalName).To(Equal("binding-external-name"))
+			Context("Sync", func() {
+				It("Should create binding and store the binding credentials in a secret", func() {
+					ctx := context.Background()
+					createdBinding = createBinding(ctx, bindingName, namespace, instanceName, "binding-external-name")
+					Expect(createdBinding.Spec.ExternalName).To(Equal("binding-external-name"))
 
-				By("Verify binding secret created")
-				bindingSecret := &v1.Secret{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: createdBinding.Status.SecretName, Namespace: namespace}, bindingSecret)
-				Expect(err).ToNot(HaveOccurred())
+					By("Verify binding secret created")
+					bindingSecret := &v1.Secret{}
+					err := k8sClient.Get(ctx, types.NamespacedName{Name: createdBinding.Status.SecretName, Namespace: namespace}, bindingSecret)
+					Expect(err).ToNot(HaveOccurred())
 
-				Expect(bindingSecret.Data).ToNot(BeNil())
-				Expect(len(bindingSecret.Data["secret_key"])).ToNot(BeNil())
+					Expect(bindingSecret.Data).ToNot(BeNil())
+					Expect(len(bindingSecret.Data["secret_key"])).ToNot(BeNil())
 
-				Expect(string(bindingSecret.Data["secret_key"])).To(Equal("secret_value"))
+					Expect(string(bindingSecret.Data["secret_key"])).To(Equal("secret_value"))
+				})
+				When("bind call to SM returns error", func() {
+					errorMessage := "no binding for you"
+
+					BeforeEach(func() {
+						fakeClient.BindReturns(nil, "", errors.New(errorMessage))
+					})
+
+					It("should fail with the error returned from SM", func() {
+						createBindingWithError(context.Background(), bindingName, namespace, instanceName, "existing-name",
+							errorMessage)
+					})
+				})
+
+			})
+
+			Context("Async", func() {
+				It("Should create binding and store the binding credentials in a secret", func() {
+					//TODO
+				})
+				When("bind polling returns error", func() {
+					It("should fail with the error returned from SM", func() {
+						//TODO
+					})
+				})
+
 			})
 
 			When("external name is not provided", func() {
@@ -239,21 +262,17 @@ var _ = Describe("ServiceBinding controller", func() {
 			})
 
 			XWhen("referenced service instance is not ready", func() {
-				It("should retry and succeed once the instance is ready?", func() {
-					// TODO what is the expected behaviour?
+				It("should retry and succeed once the instance is ready", func() {
+					// TODO
 				})
 			})
 
-			When("bind call to SM returns error", func() {
-				errorMessage := "no binding for you"
+		})
 
-				BeforeEach(func() {
-					fakeClient.BindReturns(nil, "", errors.New(errorMessage))
-				})
-
-				It("should fail with the error returned from SM", func() {
-					createBindingWithError(context.Background(), bindingName, namespace, instanceName, "existing-name",
-						errorMessage)
+		Context("Recovery", func() {
+			When("binding exists in SM", func() {
+				It("should point to the existing binding and not create a new one", func() {
+					//TODO
 				})
 			})
 		})
@@ -287,4 +306,5 @@ var _ = Describe("ServiceBinding controller", func() {
 			})
 		})
 	})
+
 })

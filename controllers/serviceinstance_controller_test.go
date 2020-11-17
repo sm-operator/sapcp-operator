@@ -2,11 +2,9 @@ package controllers
 
 import (
 	"context"
-	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -14,12 +12,6 @@ import (
 // +kubebuilder:docs-gen:collapse=Imports
 
 var _ = XDescribe("ServiceInstance controller", func() {
-
-	// Define utility constants for object names and testing timeouts/durations and intervals.
-	const (
-		timeout  = time.Second * 10
-		interval = time.Millisecond * 250
-	)
 
 	Context("Provisioning new service instance", func() {
 		It("Should succeed", func() {
