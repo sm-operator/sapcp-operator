@@ -11,11 +11,15 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+GO_TEST = go test ./... -coverpkg $(go list ./... | egrep -v "fakes|test" | paste -sd "," -) -coverprofile=profile.cov
+
+
 all: manager
 
-# Run tests
+# Run tests go test and coverage
 test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+	$(GO_TEST)
+
 
 # Build manager binary
 manager: generate fmt vet

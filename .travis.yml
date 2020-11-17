@@ -4,10 +4,14 @@ language: go
 
 go:
   - "1.14.x"
-install: ./hack/install-dependencies.sh
+install:
+  - ./hack/install-dependencies.sh
+  - go get golang.org/x/tools/cmd/cover
+  - go get github.com/mattn/goveralls
 
 jobs:
   include:
     - name: "Tests"
       script:
         - make test
+        - goveralls -coverprofile profile.cov -service=travis-ci
