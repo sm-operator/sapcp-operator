@@ -97,7 +97,6 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			return ctrl.Result{Requeue: true, RequeueAfter: config2.Get().PollInterval}, nil
 		case string(smTypes.FAILED):
 			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceBinding)
-			break
 		case string(smTypes.SUCCEEDED):
 
 			if serviceBinding.Status.OperationType == smTypes.CREATE {
