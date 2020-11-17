@@ -114,7 +114,6 @@ var _ = Describe("ServiceBinding controller", func() {
 			},
 			Spec: v1alpha1.ServiceInstanceSpec{
 				ExternalName:        externalName,
-				ServicePlanID:       "a-plan-id",
 				ServicePlanName:     "a-plan-name",
 				ServiceOfferingName: "an-offering-name",
 			},
