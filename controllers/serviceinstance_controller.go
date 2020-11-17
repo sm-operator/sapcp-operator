@@ -64,12 +64,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	//TODO webhook
-	extenralName := serviceInstance.Spec.ExternalName
-	if len(extenralName) == 0 {
-		extenralName = serviceInstance.Name
-	}
-
 	if len(serviceInstance.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
 		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceInstance.Status.OperationURL))
@@ -93,7 +87,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
 		case string(smTypes.FAILED):
 			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceInstance)
-			break
 		case string(smTypes.SUCCEEDED):
 			setSuccessConditions(smTypes.OperationCategory(status.Type), serviceInstance)
 			if serviceInstance.Status.OperationType == smTypes.DELETE {
@@ -263,7 +256,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		}
 
 		smInstanceID, operationURL, err := smClient.Provision(&types.ServiceInstance{
-			Name:          extenralName,
+			Name:          serviceInstance.Spec.ExternalName,
 			ServicePlanID: serviceInstance.Spec.ServicePlanID,
 			Labels:        labels,
 			Parameters:    instanceParameters,
@@ -376,13 +369,10 @@ func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1
 		k8sInstance.Status.OperationURL = buildOperationURL(smInstance.LastOperation.ID, smInstance.ID, web.ServiceInstancesURL)
 		k8sInstance.Status.OperationType = smInstance.LastOperation.Type
 		setInProgressCondition(smInstance.LastOperation.Type, smInstance.LastOperation.Description, k8sInstance)
-		break
 	case smTypes.SUCCEEDED:
 		setSuccessConditions(smInstance.LastOperation.Type, k8sInstance)
-		break
 	case smTypes.FAILED:
 		setFailureConditions(smInstance.LastOperation.Type, smInstance.LastOperation.Description, k8sInstance)
-		break
 	}
 }
 
