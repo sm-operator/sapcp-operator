@@ -382,7 +382,7 @@ func (client *serviceManagerClient) getPlanID(instance *types.ServiceInstance, s
 
 	var commaSepOfferingIds string
 	if len(offerings.ServiceOfferings) == 0 {
-		return "",  fmt.Errorf("service offering with name %s not found", serviceName)
+		return "", fmt.Errorf("service offering with name %s not found", serviceName)
 	} else {
 		serviceOfferingIds := make([]string, 0, len(offerings.ServiceOfferings))
 		for _, svc := range offerings.ServiceOfferings {
@@ -410,7 +410,13 @@ func (client *serviceManagerClient) getPlanID(instance *types.ServiceInstance, s
 			}
 		}
 	}
-	return "", fmt.Errorf("multiple matches for service plan  %s and service offering %s", planName, serviceName)
+
+	if len(instance.ServicePlanID) > 0 {
+		err = fmt.Errorf("provided plan ID %s does not match the provided offering name '%s' and plan name '%s' ", instance.ServicePlanID, planName, serviceName)
+	} else {
+		err = fmt.Errorf("ambeguity error, found more than one resource matching the provided offering name '%s' and plan name '%s', provide the desired servicePlanID", serviceName, planName)
+	}
+	return "", err
 
 }
 
