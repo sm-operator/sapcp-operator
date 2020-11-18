@@ -85,7 +85,7 @@ CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
 lint: lint-deps
-	golangci-lint run --timeout 5m
+	golangci-lint run --timeout 5m --tests false
 
 lint-deps:
 	@if ! which golangci-lint >/dev/null || [[ "$$(golangci-lint --version)" != *${LINT_VERSION}* ]]; then \
