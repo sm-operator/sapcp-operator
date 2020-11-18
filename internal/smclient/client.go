@@ -80,6 +80,8 @@ type serviceManagerClient struct {
 func NewClient(ctx context.Context, subdomain string, config *ClientConfig, httpClient auth.HTTPClient ) (Client, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
+	} else {
+		return &serviceManagerClient{Context: ctx, Config: config, HttpClient: httpClient}, nil
 	}
 	client := &serviceManagerClient{Context: ctx, Config: config, HttpClient: httpClient}
 	var params *Parameters
