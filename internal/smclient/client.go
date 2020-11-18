@@ -25,6 +25,7 @@ import (
 	"github.com/Peripli/service-manager/pkg/log"
 	"github.com/Peripli/service-manager/pkg/util"
 	"github.com/Peripli/service-manager/pkg/web"
+	"github.com/sm-operator/sapcp-operator/internal/auth"
 	"github.com/sm-operator/sapcp-operator/internal/httputil"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	"golang.org/x/oauth2"
@@ -60,7 +61,6 @@ type Client interface {
 	// It should be used only in case there is no already implemented method for such an operation
 	Call(method string, smpath string, body io.Reader, q *Parameters) (*http.Response, error)
 }
-
 type ServiceManagerError struct {
 	Message    string
 	StatusCode int
@@ -73,13 +73,14 @@ func (e *ServiceManagerError) Error() string {
 type serviceManagerClient struct {
 	Context    context.Context
 	Config     *ClientConfig
-	HttpClient *http.Client
+	HttpClient auth.HTTPClient
 }
 
 // NewClientWithAuth returns new SM Client configured with the provided configuration
-func NewClient(subdomain string, config *ClientConfig) (Client, error) {
-	httpClient := http.DefaultClient
-	ctx := context.Background()
+func NewClient(ctx context.Context, subdomain string, config *ClientConfig, httpClient auth.HTTPClient ) (Client, error) {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
 	client := &serviceManagerClient{Context: ctx, Config: config, HttpClient: httpClient}
 	var params *Parameters
 	if len(subdomain) > 0 {
@@ -104,7 +105,7 @@ func NewClient(subdomain string, config *ClientConfig) (Client, error) {
 		AuthStyle:    oauth2.AuthStyleInParams,
 	}
 
-	authClient := newAuthClient(ccConfig, config.SSLDisabled)
+	authClient := auth.NewAuthClient(ccConfig, config.SSLDisabled)
 	return &serviceManagerClient{Context: ctx, Config: config, HttpClient: authClient}, nil
 }
 
@@ -133,12 +134,6 @@ func fetchTokenUrl(info *types.Info, client *http.Client) (string, error) {
 		return "", errors.New("could not fetch token endpoint")
 	}
 	return tokenUrl, nil
-}
-
-func newAuthClient(ccConfig *clientcredentials.Config, sslDisabled bool) *http.Client {
-	httpClient := httputil.BuildHTTPClient(sslDisabled)
-	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, httpClient)
-	return oauth2.NewClient(ctx, ccConfig.TokenSource(ctx))
 }
 
 func (client *serviceManagerClient) GetInfo(q *Parameters) (*types.Info, error) {
