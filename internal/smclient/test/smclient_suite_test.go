@@ -39,7 +39,6 @@ var (
 	client         smclient.Client
 	handlerDetails []HandlerDetails
 	validToken     = "valid-token"
-	invalidToken   = "invalid-token"
 	smServer       *httptest.Server
 	fakeAuthClient *FakeAuthClient
 	params         *smclient.Parameters
@@ -79,10 +78,6 @@ var _ = BeforeEach(func() {
 	params = &smclient.Parameters{
 		GeneralParams: []string{"key=value"},
 	}
-})
-
-var _ = AfterEach(func() {
-	Expect(fakeAuthClient.requestURI).Should(ContainSubstring("key=value"), fmt.Sprintf("Request URI %s should contain ?key=value", fakeAuthClient.requestURI))
 })
 
 var _ = JustBeforeEach(func() {
