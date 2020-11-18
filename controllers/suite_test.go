@@ -106,7 +106,6 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	fakeClient = &smclientfakes.FakeClient{}
-	fakeClient.ProvisionReturns("12345678", "", nil)
 
 	err = (&ServiceInstanceReconciler{
 		Client:   k8sManager.GetClient(),
