@@ -40,7 +40,7 @@ var _ = Describe("Binding test", func() {
 
 		Context("when there are no service bindings registered", func() {
 			BeforeEach(func() {
-				bindingsArray := []types.ServiceBinding{}
+				var bindingsArray []types.ServiceBinding
 				bindings := types.ServiceBindings{ServiceBindings: bindingsArray}
 				responseBody, _ := json.Marshal(bindings)
 
