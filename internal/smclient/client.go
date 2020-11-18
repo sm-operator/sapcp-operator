@@ -109,7 +109,7 @@ func NewClient(ctx context.Context, subdomain string, config *ClientConfig, http
 	return &serviceManagerClient{Context: ctx, Config: config, HttpClient: authClient}, nil
 }
 
-func fetchTokenUrl(info *types.Info, client *http.Client) (string, error) {
+func fetchTokenUrl(info *types.Info, client auth.HTTPClient) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, httputil.NormalizeURL(info.TokenIssuerURL)+"/.well-known/openid-configuration", nil)
 	if err != nil {
 		return "", err
