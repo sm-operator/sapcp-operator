@@ -184,12 +184,12 @@ func getSMClient(ctx context.Context, r client.Client, log logr.Logger) (smclien
 	if err != nil {
 		return nil, err
 	}
-	if cl, err := smclient.NewClient(string(secretData["subdomain"]), &smclient.ClientConfig{
+	if cl, err := smclient.NewClient(ctx, string(secretData["subdomain"]), &smclient.ClientConfig{
 		ClientID:     string(secretData["clientid"]),
 		ClientSecret: string(secretData["clientsecret"]),
 		URL:          string(secretData["url"]),
 		SSLDisabled:  false,
-	}); err != nil {
+	}, nil); err != nil {
 		log.Error(err, "Failed to initialize SM client")
 		return nil, err
 	} else {

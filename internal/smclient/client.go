@@ -25,6 +25,7 @@ import (
 	"github.com/Peripli/service-manager/pkg/log"
 	"github.com/Peripli/service-manager/pkg/util"
 	"github.com/Peripli/service-manager/pkg/web"
+	"github.com/sm-operator/sapcp-operator/internal/auth"
 	"github.com/sm-operator/sapcp-operator/internal/httputil"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	"golang.org/x/oauth2"
@@ -60,7 +61,6 @@ type Client interface {
 	// It should be used only in case there is no already implemented method for such an operation
 	Call(method string, smpath string, body io.Reader, q *Parameters) (*http.Response, error)
 }
-
 type ServiceManagerError struct {
 	Message    string
 	StatusCode int
@@ -73,13 +73,16 @@ func (e *ServiceManagerError) Error() string {
 type serviceManagerClient struct {
 	Context    context.Context
 	Config     *ClientConfig
-	HttpClient *http.Client
+	HttpClient auth.HTTPClient
 }
 
 // NewClientWithAuth returns new SM Client configured with the provided configuration
-func NewClient(subdomain string, config *ClientConfig) (Client, error) {
-	httpClient := http.DefaultClient
-	ctx := context.Background()
+func NewClient(ctx context.Context, subdomain string, config *ClientConfig, httpClient auth.HTTPClient) (Client, error) {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	} else {
+		return &serviceManagerClient{Context: ctx, Config: config, HttpClient: httpClient}, nil
+	}
 	client := &serviceManagerClient{Context: ctx, Config: config, HttpClient: httpClient}
 	var params *Parameters
 	if len(subdomain) > 0 {
@@ -104,11 +107,11 @@ func NewClient(subdomain string, config *ClientConfig) (Client, error) {
 		AuthStyle:    oauth2.AuthStyleInParams,
 	}
 
-	authClient := newAuthClient(ccConfig, config.SSLDisabled)
+	authClient := auth.NewAuthClient(ccConfig, config.SSLDisabled)
 	return &serviceManagerClient{Context: ctx, Config: config, HttpClient: authClient}, nil
 }
 
-func fetchTokenUrl(info *types.Info, client *http.Client) (string, error) {
+func fetchTokenUrl(info *types.Info, client auth.HTTPClient) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, httputil.NormalizeURL(info.TokenIssuerURL)+"/.well-known/openid-configuration", nil)
 	if err != nil {
 		return "", err
@@ -135,12 +138,6 @@ func fetchTokenUrl(info *types.Info, client *http.Client) (string, error) {
 	return tokenUrl, nil
 }
 
-func newAuthClient(ccConfig *clientcredentials.Config, sslDisabled bool) *http.Client {
-	httpClient := httputil.BuildHTTPClient(sslDisabled)
-	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, httpClient)
-	return oauth2.NewClient(ctx, ccConfig.TokenSource(ctx))
-}
-
 func (client *serviceManagerClient) GetInfo(q *Parameters) (*types.Info, error) {
 	response, err := client.Call(http.MethodGet, web.InfoURL, nil, q)
 	if err != nil {
@@ -164,40 +161,17 @@ func (client *serviceManagerClient) GetInfo(q *Parameters) (*types.Info, error) 
 func (client *serviceManagerClient) Provision(instance *types.ServiceInstance, serviceName string, planName string, q *Parameters) (string, string, error) {
 	var newInstance *types.ServiceInstance
 	var instanceID string
-	if len(instance.ServicePlanID) == 0 && len(serviceName) > 0 && len(planName) > 0 {
-		q := &Parameters{
-			FieldQuery: []string{fmt.Sprintf("catalog_name eq '%s'", serviceName)},
-		}
-		offerings, err := client.ListOfferings(q)
-		if err != nil {
-			return "", "", err
-		}
-
-		var commaSepOfferingIds string
-		if len(offerings.ServiceOfferings) == 0 {
-			return "", "", fmt.Errorf("service offering with name %s not found", serviceName)
-		} else {
-			serviceOfferingIds := make([]string, 0, len(offerings.ServiceOfferings))
-			for _, svc := range offerings.ServiceOfferings {
-				serviceOfferingIds = append(serviceOfferingIds, svc.ID)
-			}
-			commaSepOfferingIds = "'" + strings.Join(serviceOfferingIds, "', '") + "'"
-		}
-
-		q = &Parameters{
-			FieldQuery: []string{fmt.Sprintf("catalog_name eq '%s'", planName), fmt.Sprintf("service_offering_id in (%s)", commaSepOfferingIds)},
-		}
-
-		plans, err := client.ListPlans(q)
-		if err != nil {
-			return "", "", err
-		}
-		if len(plans.ServicePlans) != 1 {
-			return "", "", fmt.Errorf("service plan with name %s not found for service offering %s", planName, serviceName)
-		}
-
-		instance.ServicePlanID = plans.ServicePlans[0].ID
+	if len(serviceName) == 0 || len(planName) == 0 {
+		return "", "", fmt.Errorf("service name and plan name must be not empty for instance %s", instance.Name)
 	}
+
+	planID, err := client.getPlanID(instance, serviceName, planName)
+	if err != nil {
+		return "", "", err
+	}
+
+	instance.ServicePlanID = planID
+
 	location, err := client.register(instance, web.ServiceInstancesURL, q, &newInstance)
 	if err != nil {
 		return "", "", err
@@ -395,6 +369,49 @@ func (client *serviceManagerClient) Call(method string, smpath string, body io.R
 	}
 
 	return resp, nil
+}
+
+func (client *serviceManagerClient) getPlanID(instance *types.ServiceInstance, serviceName string, planName string) (string, error) {
+	query := &Parameters{
+		FieldQuery: []string{fmt.Sprintf("catalog_name eq '%s'", serviceName)},
+	}
+	offerings, err := client.ListOfferings(query)
+	if err != nil {
+		return "", err
+	}
+
+	var commaSepOfferingIds string
+	if len(offerings.ServiceOfferings) == 0 {
+		return "",  fmt.Errorf("service offering with name %s not found", serviceName)
+	} else {
+		serviceOfferingIds := make([]string, 0, len(offerings.ServiceOfferings))
+		for _, svc := range offerings.ServiceOfferings {
+			serviceOfferingIds = append(serviceOfferingIds, svc.ID)
+		}
+		commaSepOfferingIds = "'" + strings.Join(serviceOfferingIds, "', '") + "'"
+	}
+
+	query = &Parameters{
+		FieldQuery: []string{fmt.Sprintf("catalog_name eq '%s'", planName), fmt.Sprintf("service_offering_id in (%s)", commaSepOfferingIds)},
+	}
+
+	plans, err := client.ListPlans(query)
+	if err != nil {
+		return "", err
+	}
+	if len(plans.ServicePlans) == 0 {
+		return "", fmt.Errorf("service plan %s not found for service offering %s", planName, serviceName)
+	} else if len(plans.ServicePlans) == 1 && len(instance.ServicePlanID) == 0 {
+		return plans.ServicePlans[0].ID, nil
+	} else {
+		for _, plan := range plans.ServicePlans {
+			if plan.ID == instance.ServicePlanID {
+				return plan.ID, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("multiple matches for service plan  %s and service offering %s", planName, serviceName)
+
 }
 
 // BuildURL builds the url with provided query parameters
