@@ -1,0 +1,4 @@
+run:
+  # Extend default timeout for running in single-core CI
+  timeout: 5m
+  tests: false
