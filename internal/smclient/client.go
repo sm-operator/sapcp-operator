@@ -22,6 +22,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"regexp"
+	"strings"
+
 	"github.com/Peripli/service-manager/pkg/log"
 	"github.com/Peripli/service-manager/pkg/util"
 	"github.com/Peripli/service-manager/pkg/web"
@@ -30,10 +35,6 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
-	"io"
-	"net/http"
-	"regexp"
-	"strings"
 )
 
 // Client should be implemented by SM clients
@@ -73,7 +74,7 @@ func (e *ServiceManagerError) Error() string {
 type serviceManagerClient struct {
 	Context    context.Context
 	Config     *ClientConfig
-	HttpClient auth.HTTPClient
+	HTTPClient auth.HTTPClient
 }
 
 // NewClientWithAuth returns new SM Client configured with the provided configuration
@@ -81,9 +82,9 @@ func NewClient(ctx context.Context, subdomain string, config *ClientConfig, http
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	} else {
-		return &serviceManagerClient{Context: ctx, Config: config, HttpClient: httpClient}, nil
+		return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}, nil
 	}
-	client := &serviceManagerClient{Context: ctx, Config: config, HttpClient: httpClient}
+	client := &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}
 	var params *Parameters
 	if len(subdomain) > 0 {
 		params = &Parameters{
@@ -96,22 +97,22 @@ func NewClient(ctx context.Context, subdomain string, config *ClientConfig, http
 		return nil, err
 	}
 
-	tokenUrl, err := fetchTokenUrl(info, httpClient)
+	tokenURL, err := fetchTokenURL(info, httpClient)
 	if err != nil {
 		return nil, err
 	}
 	ccConfig := &clientcredentials.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		TokenURL:     tokenUrl,
+		TokenURL:     tokenURL,
 		AuthStyle:    oauth2.AuthStyleInParams,
 	}
 
 	authClient := auth.NewAuthClient(ccConfig, config.SSLDisabled)
-	return &serviceManagerClient{Context: ctx, Config: config, HttpClient: authClient}, nil
+	return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: authClient}, nil
 }
 
-func fetchTokenUrl(info *types.Info, client auth.HTTPClient) (string, error) {
+func fetchTokenURL(info *types.Info, client auth.HTTPClient) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, httputil.NormalizeURL(info.TokenIssuerURL)+"/.well-known/openid-configuration", nil)
 	if err != nil {
 		return "", err
@@ -131,11 +132,11 @@ func fetchTokenUrl(info *types.Info, client auth.HTTPClient) (string, error) {
 		return "", err
 	}
 
-	tokenUrl, ok := configuration["token_endpoint"]
+	tokenURL, ok := configuration["token_endpoint"]
 	if !ok {
 		return "", errors.New("could not fetch token endpoint")
 	}
-	return tokenUrl, nil
+	return tokenURL, nil
 }
 
 func (client *serviceManagerClient) GetInfo(q *Parameters) (*types.Info, error) {
@@ -258,7 +259,7 @@ func (client *serviceManagerClient) UpdateInstance(id string, updatedInstance *t
 
 func (client *serviceManagerClient) list(result interface{}, url string, q *Parameters) error {
 	fullURL := httputil.NormalizeURL(client.Config.URL) + BuildURL(url, q)
-	return util.ListAll(client.Context, client.HttpClient.Do, fullURL, result)
+	return util.ListAll(client.Context, client.HTTPClient.Do, fullURL, result)
 }
 
 func (client *serviceManagerClient) ListOfferings(q *Parameters) (*types.ServiceOfferings, error) {
@@ -363,7 +364,7 @@ func (client *serviceManagerClient) Call(method string, smpath string, body io.R
 	req.Header.Add("Content-Type", "application/json")
 
 	log.C(client.Context).Debugf("Sending request %s %s", req.Method, req.URL)
-	resp, err := client.HttpClient.Do(req)
+	resp, err := client.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -382,14 +383,14 @@ func (client *serviceManagerClient) getPlanID(instance *types.ServiceInstance, s
 
 	var commaSepOfferingIds string
 	if len(offerings.ServiceOfferings) == 0 {
-		return "",  fmt.Errorf("service offering with name %s not found", serviceName)
-	} else {
-		serviceOfferingIds := make([]string, 0, len(offerings.ServiceOfferings))
-		for _, svc := range offerings.ServiceOfferings {
-			serviceOfferingIds = append(serviceOfferingIds, svc.ID)
-		}
-		commaSepOfferingIds = "'" + strings.Join(serviceOfferingIds, "', '") + "'"
+		return "", fmt.Errorf("service offering with name %s not found", serviceName)
 	}
+
+	serviceOfferingIds := make([]string, 0, len(offerings.ServiceOfferings))
+	for _, svc := range offerings.ServiceOfferings {
+		serviceOfferingIds = append(serviceOfferingIds, svc.ID)
+	}
+	commaSepOfferingIds = "'" + strings.Join(serviceOfferingIds, "', '") + "'"
 
 	query = &Parameters{
 		FieldQuery: []string{fmt.Sprintf("catalog_name eq '%s'", planName), fmt.Sprintf("service_offering_id in (%s)", commaSepOfferingIds)},
