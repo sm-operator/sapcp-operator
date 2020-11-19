@@ -18,6 +18,7 @@ package types
 
 import (
 	"encoding/json"
+
 	"github.com/Peripli/service-manager/pkg/types"
 )
 

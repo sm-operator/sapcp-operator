@@ -42,8 +42,8 @@ func conditionChanged(condition servicesv1alpha1.Condition, otherCondition *serv
 		condition.Reason != otherCondition.Reason
 }
 
-func buildOperationURL(operationID, resourceID, resourceUrl string) string {
-	return fmt.Sprintf("%s/%s%s/%s", resourceUrl, resourceID, web.ResourceOperationsURL, operationID)
+func buildOperationURL(operationID, resourceID, resourceURL string) string {
+	return fmt.Sprintf("%s/%s%s/%s", resourceURL, resourceID, web.ResourceOperationsURL, operationID)
 }
 
 func isDelete(object v1.ObjectMeta) bool {
@@ -184,17 +184,19 @@ func getSMClient(ctx context.Context, r client.Client, log logr.Logger) (smclien
 	if err != nil {
 		return nil, err
 	}
-	if cl, err := smclient.NewClient(ctx, string(secretData["subdomain"]), &smclient.ClientConfig{
+	cl, err := smclient.NewClient(ctx, string(secretData["subdomain"]), &smclient.ClientConfig{
 		ClientID:     string(secretData["clientid"]),
 		ClientSecret: string(secretData["clientsecret"]),
 		URL:          string(secretData["url"]),
 		SSLDisabled:  false,
-	}, nil); err != nil {
+	}, nil)
+
+	if err != nil {
 		log.Error(err, "Failed to initialize SM client")
 		return nil, err
-	} else {
-		return cl, nil
 	}
+	return cl, nil
+
 }
 
 func getSMSecret(ctx context.Context, r client.Client, log logr.Logger, namespace string) (map[string][]byte, error) {
