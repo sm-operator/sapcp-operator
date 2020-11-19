@@ -345,16 +345,14 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		}
 
 		return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
-	} else {
-		log.Info("Instance updated successfully")
-		setSuccessConditions(smTypes.UPDATE, serviceInstance)
-		if err := r.Status().Update(ctx, serviceInstance); err != nil {
-			log.Error(err, "unable to update ServiceInstance status")
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, nil
 	}
+	log.Info("Instance updated successfully")
+	setSuccessConditions(smTypes.UPDATE, serviceInstance)
+	if err := r.Status().Update(ctx, serviceInstance); err != nil {
+		log.Error(err, "unable to update ServiceInstance status")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1alpha1.ServiceInstance, smInstance types.ServiceInstance) {
@@ -401,9 +399,8 @@ func (r *ServiceInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *ServiceInstanceReconciler) getSMClient(ctx context.Context, log logr.Logger) (smclient.Client, error) {
 	if r.SMClient != nil {
 		return r.SMClient, nil
-	} else {
-		return getSMClient(ctx, r, log)
 	}
+	return getSMClient(ctx, r, log)
 }
 
 func getInstanceParameters(serviceInstance *servicesv1alpha1.ServiceInstance) (json.RawMessage, error) {
