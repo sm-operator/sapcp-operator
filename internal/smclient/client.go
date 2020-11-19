@@ -77,13 +77,13 @@ type serviceManagerClient struct {
 }
 
 // NewClientWithAuth returns new SM Client configured with the provided configuration
-func NewClient(ctx context.Context, subdomain string, config *ClientConfig, HTTPClient auth.HTTPClient) (Client, error) {
-	if HTTPClient == nil {
-		HTTPClient = http.DefaultClient
+func NewClient(ctx context.Context, subdomain string, config *ClientConfig, httpClient auth.HTTPClient) (Client, error) {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
 	} else {
-		return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: HTTPClient}, nil
+		return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}, nil
 	}
-	client := &serviceManagerClient{Context: ctx, Config: config, HTTPClient: HTTPClient}
+	client := &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}
 	var params *Parameters
 	if len(subdomain) > 0 {
 		params = &Parameters{
@@ -96,7 +96,7 @@ func NewClient(ctx context.Context, subdomain string, config *ClientConfig, HTTP
 		return nil, err
 	}
 
-	tokenURL, err := fetchTokenURL(info, HTTPClient)
+	tokenURL, err := fetchTokenURL(info, httpClient)
 	if err != nil {
 		return nil, err
 	}
