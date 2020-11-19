@@ -245,10 +245,9 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if serviceBinding.Generation == serviceBinding.Status.ObservedGeneration {
 		log.Info(fmt.Sprintf("Spec is not changed - ignoring... Generation is - %v", serviceBinding.Generation))
 		return ctrl.Result{}, nil
-	} else {
-		log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.Status.ObservedGeneration))
 	}
 
+	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.Status.ObservedGeneration))
 	operationType := smTypes.CREATE
 
 	log.Info("service instance name " + serviceBinding.Spec.ServiceInstanceName + " binding namespace " + serviceBinding.Namespace)

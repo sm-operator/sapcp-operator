@@ -22,6 +22,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"regexp"
+	"strings"
+
 	"github.com/Peripli/service-manager/pkg/log"
 	"github.com/Peripli/service-manager/pkg/util"
 	"github.com/Peripli/service-manager/pkg/web"
@@ -30,10 +35,6 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
-	"io"
-	"net/http"
-	"regexp"
-	"strings"
 )
 
 // Client should be implemented by SM clients
