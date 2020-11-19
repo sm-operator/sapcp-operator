@@ -45,7 +45,7 @@ func getInstance() *ServiceInstance {
 			ServiceOfferingName: "service-offering-1",
 			ServicePlanName:     "service-plan-name-1",
 			ServicePlanID:       "service-plan-id-1",
-			ExternalName: "my-service-instance-1",
+			ExternalName:        "my-service-instance-1",
 		},
 
 		Status: ServiceInstanceStatus{},

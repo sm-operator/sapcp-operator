@@ -6,7 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-
 var _ = Describe("Service Binding Webhook Test", func() {
 	var binding *ServiceBinding
 	BeforeEach(func() {
