@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
@@ -32,7 +34,6 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"net/http"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -208,27 +209,28 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				}
 
 				return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
-			} else {
-				log.Info("Binding was deleted successfully")
-				serviceBinding.Status.BindingID = ""
-				setSuccessConditions(smTypes.DELETE, serviceBinding)
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				// remove our finalizer from the list and update it.
-				if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-					log.Error(err, "failed to remove finalizer")
-					return ctrl.Result{}, err
-				}
-
-				// Stop reconciliation as the item is being deleted
-				return ctrl.Result{}, nil
 			}
+
+			log.Info("Binding was deleted successfully")
+			serviceBinding.Status.BindingID = ""
+			setSuccessConditions(smTypes.DELETE, serviceBinding)
+			if err := r.Status().Update(ctx, serviceBinding); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+
+			// Stop reconciliation as the item is being deleted
+			return ctrl.Result{}, nil
+
 		}
 	} else {
 		// The object is not being deleted, so if it does not have our finalizer,
@@ -469,9 +471,8 @@ func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Logger) (smclient.Client, error) {
 	if r.SMClient != nil {
 		return r.SMClient, nil
-	} else {
-		return getSMClient(ctx, r, log)
 	}
+	return getSMClient(ctx, r, log)
 }
 
 func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
@@ -548,10 +549,9 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch binding secret")
 			return err
-		} else {
-			// secret not found, nothing more to do
-			return nil
 		}
+		// secret not found, nothing more to do
+		return nil
 	}
 
 	if err := r.Delete(ctx, bindingSecert); err != nil {
