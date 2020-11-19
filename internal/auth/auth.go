@@ -2,10 +2,11 @@ package auth
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/sm-operator/sapcp-operator/internal/httputil"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
-	"net/http"
 )
 
 // HTTPClient interface

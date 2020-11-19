@@ -42,8 +42,8 @@ func conditionChanged(condition servicesv1alpha1.Condition, otherCondition *serv
 		condition.Reason != otherCondition.Reason
 }
 
-func buildOperationURL(operationID, resourceID, resourceUrl string) string {
-	return fmt.Sprintf("%s/%s%s/%s", resourceUrl, resourceID, web.ResourceOperationsURL, operationID)
+func buildOperationURL(operationID, resourceID, resourceURL string) string {
+	return fmt.Sprintf("%s/%s%s/%s", resourceURL, resourceID, web.ResourceOperationsURL, operationID)
 }
 
 func isDelete(object v1.ObjectMeta) bool {

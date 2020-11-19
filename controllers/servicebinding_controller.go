@@ -208,27 +208,28 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				}
 
 				return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
-			} else {
-				log.Info("Binding was deleted successfully")
-				serviceBinding.Status.BindingID = ""
-				setSuccessConditions(smTypes.DELETE, serviceBinding)
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				// remove our finalizer from the list and update it.
-				if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-					log.Error(err, "failed to remove finalizer")
-					return ctrl.Result{}, err
-				}
-
-				// Stop reconciliation as the item is being deleted
-				return ctrl.Result{}, nil
 			}
+
+			log.Info("Binding was deleted successfully")
+			serviceBinding.Status.BindingID = ""
+			setSuccessConditions(smTypes.DELETE, serviceBinding)
+			if err := r.Status().Update(ctx, serviceBinding); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+
+			// Stop reconciliation as the item is being deleted
+			return ctrl.Result{}, nil
+
 		}
 	} else {
 		// The object is not being deleted, so if it does not have our finalizer,
@@ -245,10 +246,9 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if serviceBinding.Generation == serviceBinding.Status.ObservedGeneration {
 		log.Info(fmt.Sprintf("Spec is not changed - ignoring... Generation is - %v", serviceBinding.Generation))
 		return ctrl.Result{}, nil
-	} else {
-		log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.Status.ObservedGeneration))
 	}
-
+	
+	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.Status.ObservedGeneration))
 	operationType := smTypes.CREATE
 
 	log.Info("service instance name " + serviceBinding.Spec.ServiceInstanceName + " binding namespace " + serviceBinding.Namespace)
