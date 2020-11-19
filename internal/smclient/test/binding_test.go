@@ -11,7 +11,7 @@ import (
 	"net/http"
 )
 
-var binding    *types.ServiceBinding
+var binding *types.ServiceBinding
 
 var _ = Describe("Binding test", func() {
 	Describe("List service bindings", func() {

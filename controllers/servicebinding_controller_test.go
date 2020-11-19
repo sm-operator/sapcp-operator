@@ -144,6 +144,7 @@ var _ = Describe("ServiceBinding controller", func() {
 	})
 
 	BeforeEach(func() {
+		fakeClient.ProvisionReturns("12345678", "", nil)
 		fakeClient.BindReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, Credentials: json.RawMessage("{\"secret_key\": \"secret_value\"}")}, "", nil)
 	})
 
