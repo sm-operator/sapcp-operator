@@ -22,13 +22,21 @@ const (
 	fakeInstanceName         = "ic-test-instance"
 	fakeInstanceExternalName = "ic-test-instance-external-name"
 	testNamespace            = "ic-test-namespace"
+	fakeOfferingName         = "offering-a"
+	fakePlanName             = "plan-a"
+	fakePlanID               = "id-plan-id"
 )
 
 var _ = Describe("ServiceInstance controller", func() {
 
 	var createdInstance *v1alpha1.ServiceInstance
+	instanceSpec := v1alpha1.ServiceInstanceSpec{
+		ExternalName:        fakeInstanceExternalName,
+		ServicePlanName:     fakePlanName,
+		ServiceOfferingName: fakeOfferingName,
+	}
 
-	createInstance := func(ctx context.Context, name, namespace, externalName string) *v1alpha1.ServiceInstance {
+	createInstance := func(ctx context.Context, name, namespace string, instanceSpec v1alpha1.ServiceInstanceSpec) *v1alpha1.ServiceInstance {
 		instance := &v1alpha1.ServiceInstance{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "services.cloud.sap.com/v1alpha1",
@@ -38,11 +46,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				Name:      name,
 				Namespace: namespace,
 			},
-			Spec: v1alpha1.ServiceInstanceSpec{
-				ExternalName:        externalName,
-				ServicePlanName:     "a-plan-name",
-				ServiceOfferingName: "an-offering-name",
-			},
+			Spec: instanceSpec,
 		}
 		Expect(k8sClient.Create(ctx, instance)).Should(Succeed())
 
@@ -56,7 +60,6 @@ var _ = Describe("ServiceInstance controller", func() {
 			}
 			return len(createdInstance.Status.Conditions) > 0
 		}, timeout, interval).Should(BeTrue())
-		//Expect(createdInstance.Status.InstanceID).ToNot(BeEmpty())
 
 		return createdInstance
 	}
@@ -84,11 +87,34 @@ var _ = Describe("ServiceInstance controller", func() {
 	})
 
 	Context("Create", func() {
-		XContext("Invalid parameters", func() {
-			Context("service plan id not provided", func() {
+		Context("Invalid parameters", func() {
+			XContext("service plan id not provided", func() {
 				When("service offering name and service plan name are not provided", func() {
 					It("provisioning should fail", func() {
-						//TODO
+						//TODO check why not failing
+						instance := &v1alpha1.ServiceInstance{
+							TypeMeta: metav1.TypeMeta{
+								APIVersion: "services.cloud.sap.com/v1alpha1",
+								Kind:       "ServiceInstance",
+							},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      fakeInstanceName,
+								Namespace: testNamespace,
+							},
+							//Spec: v1alpha1.ServiceInstanceSpec{},
+						}
+						//k8sClient.Create(context.Background(), instance)
+
+						Expect(k8sClient.Create(context.Background(), instance)).Should(Succeed())
+						Eventually(func() bool {
+							createdInstance := &v1alpha1.ServiceInstance{}
+
+							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: fakeInstanceName, Namespace: testNamespace}, createdInstance)
+							if err != nil {
+								return false
+							}
+							return len(createdInstance.Status.Conditions) > 0
+						}, timeout, interval).Should(BeTrue())
 					})
 				})
 				When("service offering name is provided and service plan name is not provided", func() {
@@ -103,21 +129,38 @@ var _ = Describe("ServiceInstance controller", func() {
 				})
 			})
 			Context("service plan id is provided", func() {
-				When("plan id does not exists in SM", func() {
-					It("provisioning should fail", func() {
-						//TODO
-					})
+				BeforeEach(func() {
+					//fakeClient.ListOfferingsReturns(&types2.ServiceOfferings{
+					//	ServiceOfferings: []types2.ServiceOffering{
+					//		{
+					//			ID:            "1111",
+					//			Name:          fakeOfferingName,
+					//		},
+					//	},
+					//}, nil)
+					//fakeClient.ListPlansReturns(&types2.ServicePlans{
+					//	ServicePlans: []types2.ServicePlan{
+					//		{
+					//			ID:            fakePlanID,
+					//			Name:          fakePlanName,
+					//		},
+					//	},
+					//}, nil)
+					fakeClient.ProvisionReturns("", "", fmt.Errorf("provided plan id does not match the provided offeing name and plan name"))
 				})
-				When("plan id does not match the provided plan name", func() {
+				When("plan id does not match the provided offering name and plan name", func() {
+					instanceSpec := v1alpha1.ServiceInstanceSpec{
+						ServiceOfferingName: fakeOfferingName,
+						ServicePlanName:     fakePlanName,
+						ServicePlanID:       "wrong-id",
+					}
 					It("provisioning should fail", func() {
-						//TODO
+						createdInstance = createInstance(context.Background(), fakeInstanceName, testNamespace, instanceSpec)
+						Expect(createdInstance.Status.Conditions[0].Message).To(ContainSubstring("provided plan id does not match"))
 					})
+
 				})
-				When("plan id does match provided plan name but not match provided offering name", func() {
-					It("provisioning should fail", func() {
-						//TODO
-					})
-				})
+
 			})
 		})
 
@@ -125,7 +168,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			Context("Sync", func() {
 				When("service offering and service plan name are provided and service plan id not provided", func() {
 					It("should provision instance of the provided offering and plan name successfully", func() {
-						createdInstance = createInstance(context.Background(), fakeInstanceName, testNamespace, fakeInstanceExternalName)
+						createdInstance = createInstance(context.Background(), fakeInstanceName, testNamespace, instanceSpec)
 						Expect(createdInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 						Expect(createdInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
 						Expect(createdInstance.Name).To(Equal(fakeInstanceName))
@@ -144,7 +187,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					})
 
 					It("should have failure condition", func() {
-						createdInstance := createInstance(context.Background(), testNamespace, fakeInstanceName, fakeInstanceExternalName)
+						createdInstance := createInstance(context.Background(), testNamespace, fakeInstanceName, instanceSpec)
 						Expect(len(createdInstance.Status.Conditions)).To(Equal(2))
 						Expect(createdInstance.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
 						Expect(createdInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
@@ -175,7 +218,11 @@ var _ = Describe("ServiceInstance controller", func() {
 
 		When("external name is not provided", func() {
 			It("succeeds and uses the k8s name as external name", func() {
-				createdInstance := createInstance(context.Background(), fakeInstanceName, testNamespace, "")
+				withoutExternal := v1alpha1.ServiceInstanceSpec{
+					ServicePlanName:     "a-plan-name",
+					ServiceOfferingName: "an-offering-name",
+				}
+				createdInstance := createInstance(context.Background(), fakeInstanceName, testNamespace, withoutExternal)
 				Expect(createdInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 				Expect(createdInstance.Spec.ExternalName).To(Equal(fakeInstanceName))
 				Expect(createdInstance.Name).To(Equal(fakeInstanceName))
@@ -201,7 +248,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				fakeClient.ListInstancesReturns(&types2.ServiceInstances{ServiceInstances: []types2.ServiceInstance{}}, nil)
 			})
 			It("should point to the existing instance and not create a new one", func() {
-				createdInstance = createInstance(context.Background(), fakeInstanceName, testNamespace, fakeInstanceExternalName)
+				createdInstance = createInstance(context.Background(), fakeInstanceName, testNamespace, instanceSpec)
 				Expect(createdInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 				//Expect(fakeClient.ListInstancesCallCount()).To(Equal(1))
 				//Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
