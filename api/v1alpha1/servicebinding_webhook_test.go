@@ -3,19 +3,12 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"testing"
 )
 
-func TestServer(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Service Binding Webhook Suite")
-}
-
-var binding *ServiceBinding
 
 var _ = Describe("Service Binding Webhook Test", func() {
+	var binding *ServiceBinding
 	BeforeEach(func() {
 		binding = getBinding()
 	})
@@ -97,22 +90,3 @@ var _ = Describe("Service Binding Webhook Test", func() {
 		})
 	})
 })
-
-func getBinding() *ServiceBinding {
-	return &ServiceBinding{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "services.cloud.sap.com/v1alpha1",
-			Kind:       "ServiceBinding",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "service-binding-1",
-			Namespace: "namespace-1",
-		},
-		Spec: ServiceBindingSpec{
-			ServiceInstanceName: "service-instance-1",
-			ExternalName:        "my-service-binding-1",
-		},
-
-		Status: ServiceBindingStatus{},
-	}
-}
