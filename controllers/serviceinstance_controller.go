@@ -170,23 +170,23 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 				}
 
 				return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
-			} else {
-				log.Info("Instance was deleted successfully")
-				serviceInstance.Status.InstanceID = ""
-				setSuccessConditions(smTypes.DELETE, serviceInstance)
-				if err := r.Status().Update(ctx, serviceInstance); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				// remove our finalizer from the list and update it.
-				if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
-					log.Error(err, "failed to remove finalizer")
-					return ctrl.Result{}, err
-				}
-
-				// Stop reconciliation as the item is being deleted
-				return ctrl.Result{}, nil
 			}
+			log.Info("Instance was deleted successfully")
+			serviceInstance.Status.InstanceID = ""
+			setSuccessConditions(smTypes.DELETE, serviceInstance)
+			if err := r.Status().Update(ctx, serviceInstance); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
+				log.Error(err, "failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+
+			// Stop reconciliation as the item is being deleted
+			return ctrl.Result{}, nil
+
 		}
 	} else {
 		// The object is not being deleted, so if it does not have our finalizer,
@@ -203,10 +203,9 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	if serviceInstance.Generation == serviceInstance.Status.ObservedGeneration {
 		log.Info(fmt.Sprintf("Spec is not changed - ignoring... Generation is - %v", serviceInstance.Generation))
 		return ctrl.Result{}, nil
-	} else {
-		log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
 	}
 
+	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
 	if serviceInstance.Status.InstanceID == "" {
 		log.Info("Instance ID is empty, checking if instance exist in SM")
 
@@ -290,17 +289,16 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			}
 
 			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
-		} else {
-			log.Info("Instance provisioned successfully")
-			setSuccessConditions(smTypes.CREATE, serviceInstance)
-			serviceInstance.Status.InstanceID = smInstanceID
-			if err := r.Status().Update(ctx, serviceInstance); err != nil {
-				log.Error(err, "unable to update ServiceInstance status")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, nil
 		}
+		log.Info("Instance provisioned successfully")
+		setSuccessConditions(smTypes.CREATE, serviceInstance)
+		serviceInstance.Status.InstanceID = smInstanceID
+		if err := r.Status().Update(ctx, serviceInstance); err != nil {
+			log.Error(err, "unable to update ServiceInstance status")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	log.Info(fmt.Sprintf("Updating instance with ID %s", serviceInstance.Status.InstanceID))
