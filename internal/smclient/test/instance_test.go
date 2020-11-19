@@ -218,6 +218,7 @@ var _ = Describe("Instance test", func() {
 
 			Context("When no plan id provided", func() {
 				It("should provision successfully", func() {
+					instance.ServicePlanID = ""
 					responseInstanceID, location, err := client.Provision(instance, "mongo", "small", params)
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(location).Should(HaveLen(0))
