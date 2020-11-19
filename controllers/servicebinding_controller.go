@@ -393,29 +393,28 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			}
 
 			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
-		} else {
-			log.Info("Binding created successfully")
+		}
 
-			if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-				log.Error(err, "failed to create secret")
-				setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					log.Error(err, "unable to update ServiceBinding status")
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, err
-			}
-
-			setSuccessConditions(smTypes.CREATE, serviceBinding)
-			serviceBinding.Status.BindingID = smBinding.ID
-			log.Info("Updating binding", "bindingID", smBinding.ID)
+		log.Info("Binding created successfully")
+		if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
+			log.Error(err, "failed to create secret")
+			setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
 				log.Error(err, "unable to update ServiceBinding status")
 				return ctrl.Result{}, err
 			}
-
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
+
+		setSuccessConditions(smTypes.CREATE, serviceBinding)
+		serviceBinding.Status.BindingID = smBinding.ID
+		log.Info("Updating binding", "bindingID", smBinding.ID)
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
 
 	}
 
