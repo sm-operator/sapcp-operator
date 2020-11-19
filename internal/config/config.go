@@ -1,9 +1,10 @@
 package config
 
 import (
-	"github.com/kelseyhightower/envconfig"
 	"sync"
 	"time"
+
+	"github.com/kelseyhightower/envconfig"
 )
 
 var (
