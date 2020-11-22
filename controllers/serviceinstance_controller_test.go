@@ -91,30 +91,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			XContext("service plan id not provided", func() {
 				When("service offering name and service plan name are not provided", func() {
 					It("provisioning should fail", func() {
-						//TODO check why not failing
-						instance := &v1alpha1.ServiceInstance{
-							TypeMeta: metav1.TypeMeta{
-								APIVersion: "services.cloud.sap.com/v1alpha1",
-								Kind:       "ServiceInstance",
-							},
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      fakeInstanceName,
-								Namespace: testNamespace,
-							},
-							//Spec: v1alpha1.ServiceInstanceSpec{},
-						}
-						//k8sClient.Create(context.Background(), instance)
-
-						Expect(k8sClient.Create(context.Background(), instance)).Should(Succeed())
-						Eventually(func() bool {
-							createdInstance := &v1alpha1.ServiceInstance{}
-
-							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: fakeInstanceName, Namespace: testNamespace}, createdInstance)
-							if err != nil {
-								return false
-							}
-							return len(createdInstance.Status.Conditions) > 0
-						}, timeout, interval).Should(BeTrue())
+						//TODO
 					})
 				})
 				When("service offering name is provided and service plan name is not provided", func() {
@@ -130,22 +107,6 @@ var _ = Describe("ServiceInstance controller", func() {
 			})
 			Context("service plan id is provided", func() {
 				BeforeEach(func() {
-					//fakeClient.ListOfferingsReturns(&types2.ServiceOfferings{
-					//	ServiceOfferings: []types2.ServiceOffering{
-					//		{
-					//			ID:            "1111",
-					//			Name:          fakeOfferingName,
-					//		},
-					//	},
-					//}, nil)
-					//fakeClient.ListPlansReturns(&types2.ServicePlans{
-					//	ServicePlans: []types2.ServicePlan{
-					//		{
-					//			ID:            fakePlanID,
-					//			Name:          fakePlanName,
-					//		},
-					//	},
-					//}, nil)
 					fakeClient.ProvisionReturns("", "", fmt.Errorf("provided plan id does not match the provided offeing name and plan name"))
 				})
 				When("plan id does not match the provided offering name and plan name", func() {
@@ -257,7 +218,7 @@ var _ = Describe("ServiceInstance controller", func() {
 	})
 
 	XContext("Update", func() {
-		XWhen("spec is changed", func() {
+		When("spec is changed", func() {
 			It("should succeed", func() {
 				//TODO
 			})
@@ -265,13 +226,13 @@ var _ = Describe("ServiceInstance controller", func() {
 	})
 
 	XContext("Delete", func() {
-		XWhen("delete in SM succeeds", func() {
+		When("delete in SM succeeds", func() {
 			It("should delete the k8s instance", func() {
 				//TODO
 			})
 		})
 
-		XWhen("delete in SM is async", func() {
+		When("delete in SM is async", func() {
 			When("polling ends with success", func() {
 				It("should delete the k8s instance", func() {
 					//TODO
