@@ -60,7 +60,6 @@ spec:
               description: The name of the service plan
               type: string
           required:
-          - externalName
           - serviceOfferingName
           - servicePlanName
           type: object
