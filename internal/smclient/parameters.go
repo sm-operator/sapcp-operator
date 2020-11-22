@@ -1,9 +1,10 @@
 package smclient
 
 import (
-	smquery "github.com/Peripli/service-manager/pkg/query"
 	"net/url"
 	"strings"
+
+	smquery "github.com/Peripli/service-manager/pkg/query"
 )
 
 // Parameters holds common query parameters
