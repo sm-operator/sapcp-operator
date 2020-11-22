@@ -41,7 +41,7 @@ type ServiceInstanceSpec struct {
 	ServicePlanID string `json:"servicePlanID,omitempty"`
 
 	// The name of the instance in Service Manager
-	ExternalName string `json:"externalName"`
+	ExternalName string `json:"externalName,omitempty"`
 
 	// Provisioning parameters for the instance
 	// +optional

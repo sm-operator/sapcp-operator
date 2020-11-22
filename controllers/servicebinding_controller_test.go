@@ -114,7 +114,6 @@ var _ = Describe("ServiceBinding controller", func() {
 			},
 			Spec: v1alpha1.ServiceInstanceSpec{
 				ExternalName:        externalName,
-				ServicePlanID:       "a-plan-id",
 				ServicePlanName:     "a-plan-name",
 				ServiceOfferingName: "an-offering-name",
 			},
@@ -145,6 +144,7 @@ var _ = Describe("ServiceBinding controller", func() {
 	})
 
 	BeforeEach(func() {
+		fakeClient.ProvisionReturns("12345678", "", nil)
 		fakeClient.BindReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, Credentials: json.RawMessage("{\"secret_key\": \"secret_value\"}")}, "", nil)
 	})
 

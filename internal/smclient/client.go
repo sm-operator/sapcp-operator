@@ -411,7 +411,13 @@ func (client *serviceManagerClient) getPlanID(instance *types.ServiceInstance, s
 			}
 		}
 	}
-	return "", fmt.Errorf("multiple matches for service plan  %s and service offering %s", planName, serviceName)
+
+	if len(instance.ServicePlanID) > 0 {
+		err = fmt.Errorf("provided plan ID %s does not match the provided offering name %s and plan name %s", instance.ServicePlanID, serviceName, planName)
+	} else {
+		err = fmt.Errorf("ambeguity error, found more than one resource matching the provided offering name %s and plan name %s, provide the desired servicePlanID", serviceName, planName)
+	}
+	return "", err
 
 }
 
