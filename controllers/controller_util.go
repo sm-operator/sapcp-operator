@@ -88,10 +88,6 @@ func normalizeCredentials(credentialsJSON json.RawMessage) (map[string][]byte, e
 	return normalized, nil
 }
 
-func getConditionReason(opType smTypes.OperationCategory, opState smTypes.OperationState) string {
-	return fmt.Sprintf("%s %s", opType, opState)
-}
-
 func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SAPCPResource) {
 	conditions := make([]*servicesv1alpha1.Condition, 0)
 
@@ -220,4 +216,41 @@ func getSMSecret(ctx context.Context, r client.Client, log logr.Logger, namespac
 	}
 
 	return secret.Data, nil
+}
+
+func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {
+	switch opType {
+	case smTypes.CREATE:
+		if state == smTypes.SUCCEEDED {
+			return Created
+		} else if state == smTypes.IN_PROGRESS || state == smTypes.PENDING {
+			return CreateInProgress
+		} else if state == smTypes.FAILED {
+			return CreateFailed
+		} else {
+			return fmt.Sprintf("unknown create state - %s", state)
+		}
+	case smTypes.UPDATE:
+		if state == smTypes.SUCCEEDED {
+			return Updated
+		} else if state == smTypes.IN_PROGRESS || state == smTypes.PENDING {
+			return UpdateInProgress
+		} else if state == smTypes.FAILED {
+			return UpdateFailed
+		} else {
+			return fmt.Sprintf("unknown create state - %s", state)
+		}
+	case smTypes.DELETE:
+		if state == smTypes.SUCCEEDED {
+			return Deleted
+		} else if state == smTypes.IN_PROGRESS || state == smTypes.PENDING {
+			return DeleteInProgress
+		} else if state == smTypes.FAILED {
+			return DeleteFailed
+		} else {
+			return fmt.Sprintf("unknown create state - %s", state)
+		}
+	default:
+		return fmt.Sprintf("unknown operation type - %s", opType)
+	}
 }

@@ -69,7 +69,11 @@ var _ = Describe("ServiceInstance controller", func() {
 
 	deleteInstance := func(ctx context.Context, instanceToDelete *v1alpha1.ServiceInstance, wait bool) {
 
-		Expect(k8sClient.Delete(ctx, instanceToDelete)).Should(Succeed())
+		err := k8sClient.Delete(ctx, instanceToDelete)
+		if err != nil {
+			Expect(errors.IsNotFound(err)).To(Equal(true))
+			return
+		}
 
 		if wait {
 			Eventually(func() bool {
@@ -410,7 +414,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		})
 	})
 
-	XDescribe("Delete", func() {
+	Describe("Delete", func() {
 		BeforeEach(func() {
 			serviceInstance = createInstance(ctx, instanceSpec)
 		})
