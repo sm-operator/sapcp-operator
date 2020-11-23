@@ -17,6 +17,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	Created = "Created"
+	Updated = "Updated"
+	Deleted = "Deleted"
+
+	CreateInProgress = "CreateInProgress"
+	UpdateInProgress = "UpdateInProgress"
+	DeleteInProgress = "DeleteInProgress"
+
+	CreateFailed = "CreateFailed"
+	UpdateFailed = "UpdateFailed"
+	DeleteFailed = "DeleteFailed"
+)
+
 // Helper functions to check and remove string from a slice of strings.
 func containsString(slice []string, s string) bool {
 	for _, item := range slice {
@@ -80,13 +94,13 @@ func setInProgressCondition(operationType smTypes.OperationCategory, message str
 	var defaultMessage, reason string
 	if operationType == smTypes.CREATE {
 		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
-		reason = "CreateInProgress"
+		reason = CreateInProgress
 	} else if operationType == smTypes.UPDATE {
 		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
-		reason = "UpdateInProgress"
+		reason = UpdateInProgress
 	} else if operationType == smTypes.DELETE {
 		defaultMessage = fmt.Sprintf("%s is being updated", object.GetControllerName())
-		reason = "DeleteInProgress"
+		reason = DeleteInProgress
 	}
 
 	if len(message) == 0 {
@@ -110,13 +124,13 @@ func setSuccessConditions(operationType smTypes.OperationCategory, object intern
 	var message, reason string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s provisioned successfully", object.GetControllerName())
-		reason = "Created"
+		reason = Created
 	} else if operationType == smTypes.UPDATE {
 		message = fmt.Sprintf("%s updated successfully", object.GetControllerName())
-		reason = "Updated"
+		reason = Updated
 	} else if operationType == smTypes.DELETE {
 		message = fmt.Sprintf("%s deleted successfully", object.GetControllerName())
-		reason = "Deleted"
+		reason = Deleted
 	}
 
 	conditions = append(conditions, &servicesv1alpha1.Condition{
@@ -133,13 +147,13 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 	var message, reason string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s create failed: %s", object.GetControllerName(), errorMessage)
-		reason = "createFailed"
+		reason = CreateFailed
 	} else if operationType == smTypes.UPDATE {
 		message = fmt.Sprintf("%s update failed: %s", object.GetControllerName(), errorMessage)
-		reason = "updateFailed"
+		reason = UpdateFailed
 	} else if operationType == smTypes.DELETE {
 		message = fmt.Sprintf("%s deletion failed: %s", object.GetControllerName(), errorMessage)
-		reason = "deleteFailed"
+		reason = DeleteFailed
 	}
 
 	readyCondition := servicesv1alpha1.Condition{
