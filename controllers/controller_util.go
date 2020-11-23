@@ -74,19 +74,20 @@ func normalizeCredentials(credentialsJSON json.RawMessage) (map[string][]byte, e
 	return normalized, nil
 }
 
+func getConditionReason(opType smTypes.OperationCategory, opState smTypes.OperationState) string {
+	return fmt.Sprintf("%s %s", opType, opState)
+}
+
 func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SAPCPResource) {
 	conditions := make([]*servicesv1alpha1.Condition, 0)
 
-	var defaultMessage, reason string
+	var defaultMessage string
 	if operationType == smTypes.CREATE {
 		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
-		reason = "CreateInProgress"
 	} else if operationType == smTypes.UPDATE {
 		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
-		reason = "UpdateInProgress"
 	} else if operationType == smTypes.DELETE {
 		defaultMessage = fmt.Sprintf("%s is being updated", object.GetControllerName())
-		reason = "DeleteInProgress"
 	}
 
 	if len(message) == 0 {
@@ -97,7 +98,7 @@ func setInProgressCondition(operationType smTypes.OperationCategory, message str
 		Type:               servicesv1alpha1.ConditionReady,
 		Status:             servicesv1alpha1.ConditionFalse,
 		LastTransitionTime: v1.Now(),
-		Reason:             reason,
+		Reason:             getConditionReason(operationType, smTypes.IN_PROGRESS),
 		Message:            message,
 	})
 
@@ -107,40 +108,36 @@ func setInProgressCondition(operationType smTypes.OperationCategory, message str
 func setSuccessConditions(operationType smTypes.OperationCategory, object internal.SAPCPResource) {
 	conditions := make([]*servicesv1alpha1.Condition, 0)
 
-	var message, reason string
+	var message string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s provisioned successfully", object.GetControllerName())
-		reason = "Created"
 	} else if operationType == smTypes.UPDATE {
 		message = fmt.Sprintf("%s updated successfully", object.GetControllerName())
-		reason = "Updated"
 	} else if operationType == smTypes.DELETE {
 		message = fmt.Sprintf("%s deleted successfully", object.GetControllerName())
-		reason = "Deleted"
 	}
 
 	conditions = append(conditions, &servicesv1alpha1.Condition{
 		Type:               servicesv1alpha1.ConditionReady,
 		Status:             servicesv1alpha1.ConditionTrue,
 		LastTransitionTime: v1.Now(),
-		Reason:             reason,
+		Reason:             getConditionReason(operationType, smTypes.SUCCEEDED),
 		Message:            message,
 	})
 	object.SetConditions(conditions)
 }
 
 func setFailureConditions(operationType smTypes.OperationCategory, errorMessage string, object internal.SAPCPResource) bool {
-	var message, reason string
+	var message string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s create failed: %s", object.GetControllerName(), errorMessage)
-		reason = "createFailed"
 	} else if operationType == smTypes.UPDATE {
 		message = fmt.Sprintf("%s update failed: %s", object.GetControllerName(), errorMessage)
-		reason = "updateFailed"
 	} else if operationType == smTypes.DELETE {
 		message = fmt.Sprintf("%s deletion failed: %s", object.GetControllerName(), errorMessage)
-		reason = "deleteFailed"
 	}
+
+	reason := getConditionReason(operationType, smTypes.FAILED)
 
 	readyCondition := servicesv1alpha1.Condition{
 		Type:               servicesv1alpha1.ConditionReady,
