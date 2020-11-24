@@ -248,7 +248,7 @@ var _ = Describe("ServiceInstance controller", func() {
 							}
 						}
 						return true
-					}, timeout, interval).Should(BeTrue())
+					}, timeout*2, interval).Should(BeTrue())
 				})
 			})
 		})
@@ -424,7 +424,7 @@ var _ = Describe("ServiceInstance controller", func() {
 								}
 							}
 							return true
-						}, timeout, interval).Should(BeTrue())
+						}, timeout*2, interval).Should(BeTrue())
 					})
 				})
 			})
