@@ -96,7 +96,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 				}
 				errMsg := "Unknown error occurred with Deprovision operation"
 				if status.Errors != nil {
-					errMsg = convertJsonToString(&status.Errors)
+					errMsg = convertJSONToString(&status.Errors)
 				}
 				return ctrl.Result{}, fmt.Errorf(errMsg)
 			}
@@ -366,7 +366,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	return ctrl.Result{}, nil
 }
 
-func convertJsonToString(rawJson *json.RawMessage) string {
+func convertJSONToString(rawJson *json.RawMessage) string {
 	marshalJSON, _ := rawJson.MarshalJSON()
 	return string(marshalJSON)
 }
