@@ -93,25 +93,41 @@ var _ = Describe("ServiceInstance controller", func() {
 	})
 
 	AfterEach(func() {
-		deleteInstance(ctx, serviceInstance, true)
+		if serviceInstance != nil {
+			deleteInstance(ctx, serviceInstance, true)
+		}
 	})
 
 	Describe("Create", func() {
 		Context("Invalid parameters", func() {
-			XContext("service plan id not provided", func() {
+			createInstanceWithFailure := func(spec v1alpha1.ServiceInstanceSpec) {
+				instance := &v1alpha1.ServiceInstance{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "services.cloud.sap.com/v1alpha1",
+						Kind:       "ServiceInstance",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fakeInstanceName,
+						Namespace: testNamespace,
+					},
+					Spec: spec,
+				}
+				Expect(k8sClient.Create(ctx, instance)).ShouldNot(Succeed())
+			}
+			Context("service plan id not provided", func() {
 				When("service offering name and service plan name are not provided", func() {
 					It("provisioning should fail", func() {
-						//TODO
+						createInstanceWithFailure(v1alpha1.ServiceInstanceSpec{})
 					})
 				})
 				When("service offering name is provided and service plan name is not provided", func() {
 					It("provisioning should fail", func() {
-						//TODO
+						createInstanceWithFailure(v1alpha1.ServiceInstanceSpec{ServiceOfferingName: "fake-offering"})
 					})
 				})
 				When("service offering name not provided and service plan name is provided", func() {
 					It("provisioning should fail", func() {
-						//TODO
+						createInstanceWithFailure(v1alpha1.ServiceInstanceSpec{ServicePlanID: "fake-plan"})
 					})
 				})
 			})
