@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/sm-operator/sapcp-operator/internal"
+	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"net"
 	"path/filepath"
 	"testing"
@@ -111,7 +112,7 @@ var _ = BeforeSuite(func(done Done) {
 		Client:   k8sManager.GetClient(),
 		Scheme:   k8sManager.GetScheme(),
 		Log:      ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
-		SMClient: fakeClient,
+		SMClient: func() smclient.Client { return fakeClient },
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -122,7 +123,7 @@ var _ = BeforeSuite(func(done Done) {
 		Client:   k8sManager.GetClient(),
 		Scheme:   k8sManager.GetScheme(),
 		Log:      ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
-		SMClient: fakeClient,
+		SMClient: func() smclient.Client { return fakeClient },
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

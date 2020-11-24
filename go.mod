@@ -10,6 +10,7 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect
+	github.com/google/uuid v1.1.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onrik/logrus v0.8.0 // indirect
 	github.com/onsi/ginkgo v1.12.1
