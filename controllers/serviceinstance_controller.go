@@ -20,8 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
@@ -31,6 +29,7 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"net/http"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -88,6 +87,19 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
 		case string(smTypes.FAILED):
 			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceInstance)
+			if serviceInstance.Status.OperationType == smTypes.DELETE {
+				serviceInstance.Status.OperationURL = ""
+				serviceInstance.Status.OperationType = ""
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+				errMsg := "Unknown error occurred with Deprovision operation"
+				if status.Errors != nil {
+					errMsg = convertJsonToString(&status.Errors)
+				}
+				return ctrl.Result{}, fmt.Errorf(errMsg)
+			}
 		case string(smTypes.SUCCEEDED):
 			setSuccessConditions(smTypes.OperationCategory(status.Type), serviceInstance)
 			if serviceInstance.Status.OperationType == smTypes.DELETE {
@@ -142,8 +154,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 						return ctrl.Result{}, err
 					}
 
-					// Stop reconciliation as the item is deleted
-					return ctrl.Result{}, nil
+					return ctrl.Result{}, err
 				}
 
 				//	//TODO handle non transient errors
@@ -156,7 +167,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 					}
 				}
 
-				return ctrl.Result{}, nil
+				return ctrl.Result{}, err
 			}
 
 			if operationURL != "" {
@@ -353,6 +364,11 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
+}
+
+func convertJsonToString(rawJson *json.RawMessage) string {
+	marshalJSON, _ := rawJson.MarshalJSON()
+	return string(marshalJSON)
 }
 
 func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1alpha1.ServiceInstance, smInstance types.ServiceInstance) {

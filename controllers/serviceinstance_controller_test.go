@@ -135,6 +135,11 @@ var _ = Describe("ServiceInstance controller", func() {
 				BeforeEach(func() {
 					fakeClient.ProvisionReturns("", "", fmt.Errorf("provided plan id does not match the provided offeing name and plan name"))
 				})
+				When("service offering name and service plan name are not provided", func() {
+					It("provision should fail", func() {
+						createInstanceWithFailure(v1alpha1.ServiceInstanceSpec{ServicePlanID: "fake-plan-id"})
+					})
+				})
 				When("plan id does not match the provided offering name and plan name", func() {
 					instanceSpec := v1alpha1.ServiceInstanceSpec{
 						ServiceOfferingName: fakeOfferingName,
@@ -149,38 +154,36 @@ var _ = Describe("ServiceInstance controller", func() {
 			})
 		})
 
-		Context("Valid parameters", func() {
-			Context("Sync", func() {
-				When("service offering and service plan name are provided and service plan id not provided", func() {
-					It("should provision instance of the provided offering and plan name successfully", func() {
-						serviceInstance = createInstance(ctx, instanceSpec)
-						Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
-						Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
-						Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
-						//Expect(fakeClient.ProvisionCallCount()).To(Equal(1))
+		Context("Sync", func() {
+			When("provision request to SM succeeds", func() {
+				It("should provision instance of the provided offering and plan name successfully", func() {
+					serviceInstance = createInstance(ctx, instanceSpec)
+					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
+					Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
+					Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
+					//Expect(fakeClient.ProvisionCallCount()).To(Equal(1))
+				})
+			})
+
+			When("provision request to SM fails", func() {
+				var errMessage string
+				JustBeforeEach(func() {
+					errMessage = "failed to provision instance"
+					fakeClient.ProvisionReturns("", "", &smclient.ServiceManagerError{
+						StatusCode: http.StatusBadRequest,
+						Message:    errMessage,
 					})
 				})
+				JustAfterEach(func() {
+					fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
+				})
 
-				When("provision request to SM fails", func() {
-					var errMessage string
-					JustBeforeEach(func() {
-						errMessage = "failed to provision instance"
-						fakeClient.ProvisionReturns("", "", &smclient.ServiceManagerError{
-							StatusCode: http.StatusBadRequest,
-							Message:    errMessage,
-						})
-					})
-					JustAfterEach(func() {
-						fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
-					})
-
-					It("should have failure condition", func() {
-						serviceInstance = createInstance(ctx, instanceSpec)
-						Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
-						Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
-						Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
-						//TODO should have instance ID?
-					})
+				It("should have failure condition", func() {
+					serviceInstance = createInstance(ctx, instanceSpec)
+					Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
+					Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
+					Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
+					//TODO should have instance ID?
 				})
 			})
 		})
@@ -203,7 +206,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				Expect(len(serviceInstance.Status.Conditions)).To(Equal(1))
 				Expect(serviceInstance.Status.Conditions[0].Reason).To(Equal(CreateInProgress))
 			}
-			When("service offering and service plan name are provided and service plan id not provided", func() {
+			When("polling ends with success", func() {
 				It("should update in progress condition and provision the instance successfully", func() {
 					createInstanceAsync()
 					fakeClient.StatusReturns(&types2.Operation{
@@ -227,7 +230,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					}, timeout*2, interval).Should(BeTrue())
 				})
 			})
-			When("provision request to SM fails", func() {
+			When("polling ends with failure", func() {
 				It("should update in progress condition and afterwards failure condition", func() {
 					createInstanceAsync()
 					fakeClient.StatusReturns(&types2.Operation{
@@ -431,7 +434,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		})
 	})
 
-	XDescribe("Delete", func() {
+	Describe("Delete", func() {
 		BeforeEach(func() {
 			serviceInstance = createInstance(ctx, instanceSpec)
 		})
@@ -474,12 +477,11 @@ var _ = Describe("ServiceInstance controller", func() {
 				}, nil)
 				deleteInstance(ctx, serviceInstance, false)
 				Eventually(func() bool {
-					instance := &v1alpha1.ServiceInstance{}
-					err := k8sClient.Get(ctx, instanceLookupKey, instance)
+					err := k8sClient.Get(ctx, instanceLookupKey, serviceInstance)
 					if err != nil {
 						return false
 					}
-					return len(instance.Status.Conditions) == 1 && instance.Status.Conditions[0].Reason == DeleteInProgress
+					return len(serviceInstance.Status.Conditions) == 1 && serviceInstance.Status.Conditions[0].Reason == DeleteInProgress
 				}, timeout, interval).Should(BeTrue())
 			})
 			When("polling ends with success", func() {
@@ -508,12 +510,11 @@ var _ = Describe("ServiceInstance controller", func() {
 				It("should not delete the k8s instance and condition is updated with failure", func() {
 					deleteInstance(ctx, serviceInstance, false)
 					Eventually(func() bool {
-						instance := &v1alpha1.ServiceInstance{}
-						err := k8sClient.Get(ctx, instanceLookupKey, instance)
+						err := k8sClient.Get(ctx, instanceLookupKey, serviceInstance)
 						if errors.IsNotFound(err) {
 							return false
 						}
-						return len(instance.Status.Conditions) == 2 && instance.Status.Conditions[0].Reason == DeleteFailed
+						return len(serviceInstance.Status.Conditions) == 2 && serviceInstance.Status.Conditions[0].Reason == DeleteFailed
 					}, timeout, interval).Should(BeTrue())
 				})
 			})
