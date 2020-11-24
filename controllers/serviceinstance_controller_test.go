@@ -515,7 +515,7 @@ var _ = Describe("ServiceInstance controller", func() {
 							return false
 						}
 						return len(serviceInstance.Status.Conditions) == 2 && serviceInstance.Status.Conditions[0].Reason == DeleteFailed
-					}, timeout, interval).Should(BeTrue())
+					}, timeout*2, interval).Should(BeTrue())
 				})
 			})
 		})
