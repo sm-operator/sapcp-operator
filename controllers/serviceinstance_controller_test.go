@@ -81,7 +81,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				a := &v1alpha1.ServiceInstance{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: instanceToDelete.Name, Namespace: instanceToDelete.Namespace}, a)
 				return errors.IsNotFound(err)
-			}, timeout, interval).Should(BeTrue())
+			}, timeout*2, interval).Should(BeTrue())
 		}
 	}
 
