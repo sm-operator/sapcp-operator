@@ -366,8 +366,8 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	return ctrl.Result{}, nil
 }
 
-func convertJSONToString(rawJson *json.RawMessage) string {
-	marshalJSON, _ := rawJson.MarshalJSON()
+func convertJSONToString(rawJSON *json.RawMessage) string {
+	marshalJSON, _ := rawJSON.MarshalJSON()
 	return string(marshalJSON)
 }
 
