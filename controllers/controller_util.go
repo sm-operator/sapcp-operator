@@ -29,6 +29,8 @@ const (
 	CreateFailed = "CreateFailed"
 	UpdateFailed = "UpdateFailed"
 	DeleteFailed = "DeleteFailed"
+
+	Unknown = "Unknown"
 )
 
 // Helper functions to check and remove string from a slice of strings.
@@ -219,38 +221,32 @@ func getSMSecret(ctx context.Context, r client.Client, log logr.Logger, namespac
 }
 
 func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {
-	switch opType {
-	case smTypes.CREATE:
-		if state == smTypes.SUCCEEDED {
+	switch state {
+	case smTypes.SUCCEEDED:
+		if opType == smTypes.CREATE {
 			return Created
-		} else if state == smTypes.IN_PROGRESS || state == smTypes.PENDING {
-			return CreateInProgress
-		} else if state == smTypes.FAILED {
-			return CreateFailed
-		} else {
-			return fmt.Sprintf("unknown create state - %s", state)
-		}
-	case smTypes.UPDATE:
-		if state == smTypes.SUCCEEDED {
+		} else if opType == smTypes.UPDATE {
 			return Updated
-		} else if state == smTypes.IN_PROGRESS || state == smTypes.PENDING {
-			return UpdateInProgress
-		} else if state == smTypes.FAILED {
-			return UpdateFailed
-		} else {
-			return fmt.Sprintf("unknown create state - %s", state)
-		}
-	case smTypes.DELETE:
-		if state == smTypes.SUCCEEDED {
+		} else if opType == smTypes.DELETE {
 			return Deleted
-		} else if state == smTypes.IN_PROGRESS || state == smTypes.PENDING {
-			return DeleteInProgress
-		} else if state == smTypes.FAILED {
-			return DeleteFailed
-		} else {
-			return fmt.Sprintf("unknown create state - %s", state)
 		}
-	default:
-		return fmt.Sprintf("unknown operation type - %s", opType)
+	case smTypes.IN_PROGRESS, smTypes.PENDING:
+		if opType == smTypes.CREATE {
+			return CreateInProgress
+		} else if opType == smTypes.UPDATE {
+			return UpdateInProgress
+		} else if opType == smTypes.DELETE {
+			return DeleteInProgress
+		}
+	case smTypes.FAILED:
+		if opType == smTypes.CREATE {
+			return CreateFailed
+		} else if opType == smTypes.UPDATE {
+			return UpdateFailed
+		} else if opType == smTypes.DELETE {
+			return DeleteFailed
+		}
 	}
+
+	return Unknown
 }
