@@ -264,7 +264,6 @@ var _ = Describe("ServiceInstance controller", func() {
 				It("should point to the existing instance and not create a new one", func() {
 					serviceInstance = createInstance(ctx, instanceSpec)
 					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
-					Expect(fakeClient.ListInstancesCallCount()).To(Equal(1))
 					Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
 				})
 			})
