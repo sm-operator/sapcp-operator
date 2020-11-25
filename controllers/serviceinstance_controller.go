@@ -95,9 +95,9 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 					log.Error(err, "unable to update ServiceInstance status")
 					return ctrl.Result{}, err
 				}
-				errMsg := "Unknown error occurred with Deprovision operation"
+				errMsg := "Async deprovision operation failed"
 				if status.Errors != nil {
-					errMsg = convertJSONToString(&status.Errors)
+					errMsg = fmt.Sprintf("Async deprovision operation failed, errors: %s", string(status.Errors))
 				}
 				return ctrl.Result{}, fmt.Errorf(errMsg)
 			}
@@ -365,11 +365,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
-}
-
-func convertJSONToString(rawJSON *json.RawMessage) string {
-	marshalJSON, _ := rawJSON.MarshalJSON()
-	return string(marshalJSON)
 }
 
 func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1alpha1.ServiceInstance, smInstance types.ServiceInstance) {

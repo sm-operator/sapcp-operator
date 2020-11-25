@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	smTypes "github.com/Peripli/service-manager/pkg/types"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
+	"github.com/sm-operator/sapcp-operator/internal/smclient/smclientfakes"
 	types2 "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,20 +22,18 @@ import (
 
 const (
 	fakeInstanceID           = "ic-fake-instance-id"
-	fakeInstanceName         = "ic-test-instance"
 	fakeInstanceExternalName = "ic-test-instance-external-name"
 	testNamespace            = "ic-test-namespace"
 	fakeOfferingName         = "offering-a"
 	fakePlanName             = "plan-a"
-	fakePlanID               = "id-plan-id"
 )
 
 var _ = Describe("ServiceInstance controller", func() {
 
 	var serviceInstance *v1alpha1.ServiceInstance
+	var fakeInstanceName string
 	var ctx context.Context
-
-	instanceLookupKey := types.NamespacedName{Name: fakeInstanceName, Namespace: testNamespace}
+	var defaultLookupKey types.NamespacedName
 	instanceSpec := v1alpha1.ServiceInstanceSpec{
 		ExternalName:        fakeInstanceExternalName,
 		ServicePlanName:     fakePlanName,
@@ -57,7 +57,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		createdInstance := &v1alpha1.ServiceInstance{}
 
 		Eventually(func() bool {
-			err := k8sClient.Get(ctx, instanceLookupKey, createdInstance)
+			err := k8sClient.Get(ctx, defaultLookupKey, createdInstance)
 			if err != nil {
 				return false
 			}
@@ -87,7 +87,10 @@ var _ = Describe("ServiceInstance controller", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
+		fakeInstanceName = "ic-test-" + uuid.New().String()
+		defaultLookupKey = types.NamespacedName{Name: fakeInstanceName, Namespace: testNamespace}
 
+		fakeClient = &smclientfakes.FakeClient{}
 		fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
 		fakeClient.DeprovisionReturns("", nil)
 	})
@@ -114,7 +117,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, instance)).ShouldNot(Succeed())
 			}
-			Context("service plan id not provided", func() {
+			Describe("service plan id not provided", func() {
 				When("service offering name and service plan name are not provided", func() {
 					It("provisioning should fail", func() {
 						createInstanceWithFailure(v1alpha1.ServiceInstanceSpec{})
@@ -131,10 +134,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					})
 				})
 			})
-			Context("service plan id is provided", func() {
-				BeforeEach(func() {
-					fakeClient.ProvisionReturns("", "", fmt.Errorf("provided plan id does not match the provided offeing name and plan name"))
-				})
+			Describe("service plan id is provided", func() {
 				When("service offering name and service plan name are not provided", func() {
 					It("provision should fail", func() {
 						createInstanceWithFailure(v1alpha1.ServiceInstanceSpec{ServicePlanID: "fake-plan-id"})
@@ -146,6 +146,9 @@ var _ = Describe("ServiceInstance controller", func() {
 						ServicePlanName:     fakePlanName,
 						ServicePlanID:       "wrong-id",
 					}
+					BeforeEach(func() {
+						fakeClient.ProvisionReturns("", "", fmt.Errorf("provided plan id does not match the provided offeing name and plan name"))
+					})
 					It("provisioning should fail", func() {
 						serviceInstance = createInstance(ctx, instanceSpec)
 						Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring("provided plan id does not match"))
@@ -161,7 +164,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 					Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
 					Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
-					//Expect(fakeClient.ProvisionCallCount()).To(Equal(1))
+					Expect(fakeClient.ProvisionCallCount()).To(Equal(1))
 				})
 			})
 
@@ -183,7 +186,6 @@ var _ = Describe("ServiceInstance controller", func() {
 					Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
 					Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
 					Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
-					//TODO should have instance ID?
 				})
 			})
 		})
@@ -215,16 +217,9 @@ var _ = Describe("ServiceInstance controller", func() {
 						State: string(smTypes.SUCCEEDED),
 					}, nil)
 					Eventually(func() bool {
-						err := k8sClient.Get(ctx, instanceLookupKey, serviceInstance)
-						if err != nil {
+						err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
+						if err != nil || len(serviceInstance.Status.Conditions) != 1 || serviceInstance.Status.Conditions[0].Reason != Created {
 							return false
-						} else {
-							if len(serviceInstance.Status.Conditions) != 1 {
-								return false
-							}
-							if serviceInstance.Status.Conditions[0].Reason != Created {
-								return false
-							}
 						}
 						return true
 					}, timeout*2, interval).Should(BeTrue())
@@ -239,19 +234,38 @@ var _ = Describe("ServiceInstance controller", func() {
 						State: string(smTypes.FAILED),
 					}, nil)
 					Eventually(func() bool {
-						err := k8sClient.Get(ctx, instanceLookupKey, serviceInstance)
-						if err != nil {
+						err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
+						if err != nil || len(serviceInstance.Status.Conditions) != 2 || serviceInstance.Status.Conditions[0].Reason != CreateFailed {
 							return false
-						} else {
-							if len(serviceInstance.Status.Conditions) != 2 {
-								return false
-							}
-							if serviceInstance.Status.Conditions[0].Reason != CreateFailed {
-								return false
-							}
 						}
 						return true
 					}, timeout*2, interval).Should(BeTrue())
+				})
+			})
+		})
+
+		Context("Recovery", func() {
+			When("instance exists in SM", func() {
+				BeforeEach(func() {
+					fakeClient.ProvisionReturns("", "", fmt.Errorf("ERROR"))
+					fakeClient.ListInstancesReturns(&types2.ServiceInstances{
+						ServiceInstances: []types2.ServiceInstance{
+							{
+								ID:            fakeInstanceID,
+								Name:          fakeInstanceName,
+								LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
+							},
+						},
+					}, nil)
+				})
+				AfterEach(func() {
+					fakeClient.ListInstancesReturns(&types2.ServiceInstances{ServiceInstances: []types2.ServiceInstance{}}, nil)
+				})
+				It("should point to the existing instance and not create a new one", func() {
+					serviceInstance = createInstance(ctx, instanceSpec)
+					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
+					Expect(fakeClient.ListInstancesCallCount()).To(Equal(1))
+					Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
 				})
 			})
 		})
@@ -266,32 +280,6 @@ var _ = Describe("ServiceInstance controller", func() {
 				Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 				Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceName))
 				Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
-			})
-		})
-	})
-
-	Describe("Recovery", func() {
-		When("instance exists in SM", func() {
-			BeforeEach(func() {
-				fakeClient.ProvisionReturns("", "", fmt.Errorf("ERROR"))
-				fakeClient.ListInstancesReturns(&types2.ServiceInstances{
-					ServiceInstances: []types2.ServiceInstance{
-						{
-							ID:            fakeInstanceID,
-							Name:          fakeInstanceName,
-							LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
-						},
-					},
-				}, nil)
-			})
-			AfterEach(func() {
-				fakeClient.ListInstancesReturns(&types2.ServiceInstances{ServiceInstances: []types2.ServiceInstance{}}, nil)
-			})
-			It("should point to the existing instance and not create a new one", func() {
-				serviceInstance = createInstance(ctx, instanceSpec)
-				Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
-				//Expect(fakeClient.ListInstancesCallCount()).To(Equal(1))
-				//Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
 			})
 		})
 	})
@@ -314,7 +302,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			updatedInstance := &v1alpha1.ServiceInstance{}
 
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, instanceLookupKey, updatedInstance)
+				err := k8sClient.Get(ctx, defaultLookupKey, updatedInstance)
 				if err != nil {
 					return false
 				}
@@ -363,16 +351,9 @@ var _ = Describe("ServiceInstance controller", func() {
 							State: string(smTypes.SUCCEEDED),
 						}, nil)
 						Eventually(func() bool {
-							err := k8sClient.Get(ctx, instanceLookupKey, updatedInstance)
-							if err != nil {
+							err := k8sClient.Get(ctx, defaultLookupKey, updatedInstance)
+							if err != nil || len(updatedInstance.Status.Conditions) != 1 || updatedInstance.Status.Conditions[0].Reason != Updated {
 								return false
-							} else {
-								if len(updatedInstance.Status.Conditions) != 1 {
-									return false
-								}
-								if updatedInstance.Status.Conditions[0].Reason != Updated {
-									return false
-								}
 							}
 							return true
 						}, timeout*2, interval).Should(BeTrue())
@@ -415,16 +396,9 @@ var _ = Describe("ServiceInstance controller", func() {
 							State: string(smTypes.FAILED),
 						}, nil)
 						Eventually(func() bool {
-							err := k8sClient.Get(ctx, instanceLookupKey, updatedInstance)
-							if err != nil {
+							err := k8sClient.Get(ctx, defaultLookupKey, updatedInstance)
+							if err != nil || len(updatedInstance.Status.Conditions) != 2 || updatedInstance.Status.Conditions[0].Reason != UpdateFailed {
 								return false
-							} else {
-								if len(updatedInstance.Status.Conditions) != 2 {
-									return false
-								}
-								if updatedInstance.Status.Conditions[0].Reason != UpdateFailed {
-									return false
-								}
 							}
 							return true
 						}, timeout*2, interval).Should(BeTrue())
@@ -458,7 +432,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			It("should not delete the k8s instance and should update the condition", func() {
 				deleteInstance(ctx, serviceInstance, false)
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, instanceLookupKey, serviceInstance)
+					err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
 					if err != nil {
 						return false
 					}
@@ -477,7 +451,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				}, nil)
 				deleteInstance(ctx, serviceInstance, false)
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, instanceLookupKey, serviceInstance)
+					err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
 					if err != nil {
 						return false
 					}
@@ -510,7 +484,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				It("should not delete the k8s instance and condition is updated with failure", func() {
 					deleteInstance(ctx, serviceInstance, false)
 					Eventually(func() bool {
-						err := k8sClient.Get(ctx, instanceLookupKey, serviceInstance)
+						err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
 						if errors.IsNotFound(err) {
 							return false
 						}
