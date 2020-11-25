@@ -469,7 +469,7 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 			})
 
-			XWhen("polling ends with failure", func() {
+			When("polling ends with failure", func() {
 				errorMessage := "delete-binding-async-error"
 				JustBeforeEach(func() {
 					fakeClient.StatusReturns(&smclientTypes.Operation{

@@ -99,6 +99,19 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
 		case string(smTypes.FAILED):
 			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceBinding)
+			if serviceBinding.Status.OperationType == smTypes.DELETE {
+				serviceBinding.Status.OperationURL = ""
+				serviceBinding.Status.OperationType = ""
+				if err := r.Status().Update(ctx, serviceBinding); err != nil {
+					log.Error(err, "unable to update ServiceBinding status")
+					return ctrl.Result{}, err
+				}
+				errMsg := "Async unbind operation failed"
+				if status.Errors != nil {
+					errMsg = fmt.Sprintf("Async unbind operation failed, errors: %s", string(status.Errors))
+				}
+				return ctrl.Result{}, fmt.Errorf(errMsg)
+			}
 		case string(smTypes.SUCCEEDED):
 
 			if serviceBinding.Status.OperationType == smTypes.CREATE {
