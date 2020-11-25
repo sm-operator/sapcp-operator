@@ -48,6 +48,7 @@ type ServiceBindingReconciler struct {
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
 	SMClient func() smclient.Client
+	Config   config.Config
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=servicebindings,verbs=get;list;watch;create;update;patch;delete
@@ -96,7 +97,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		case string(smTypes.IN_PROGRESS):
 			fallthrough
 		case string(smTypes.PENDING):
-			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 		case string(smTypes.FAILED):
 			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceBinding)
 			if serviceBinding.Status.OperationType == smTypes.DELETE {
@@ -224,7 +225,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 					return ctrl.Result{}, err
 				}
 
-				return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
+				return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 			}
 
 			log.Info("Binding was deleted successfully")
@@ -287,17 +288,17 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		log.Info(fmt.Sprintf("Service instance with k8s name %s is not ready for binding yet", serviceInstance.Name))
 
 		setInProgressCondition(operationType,
-			fmt.Sprintf("Referenced service instance with k8s name %s is not ready, waiting", serviceBinding.Spec.ServiceInstanceName),
+			fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
 			serviceBinding)
 		if err := r.Status().Update(ctx, serviceBinding); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{Requeue: true, RequeueAfter: config.Get().SyncPeriod}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 
 	if serviceNotUsable(serviceInstance) {
-		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name)
+		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
 
 		updated := setFailureConditions(operationType, err.Error(), serviceBinding)
@@ -306,7 +307,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				return ctrl.Result{}, err
 			}
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: config.Get().SyncPeriod}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
 	}
 
 	if serviceBinding.Status.BindingID == "" {
@@ -330,7 +331,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		bindings, err := smClient.ListBindings(&parameters)
 		if err != nil {
 			log.Error(err, "failed to list bindings in SM")
-			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().SyncPeriod}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
 		}
 		if bindings != nil && len(bindings.ServiceBindings) == 1 {
 
@@ -418,7 +419,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				return ctrl.Result{}, fmt.Errorf("failed to extract smBinding ID from operation URL %s", operationURL)
 			}
 
-			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 		}
 
 		log.Info("Binding created successfully")

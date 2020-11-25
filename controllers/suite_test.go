@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/sm-operator/sapcp-operator/internal"
+	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"net"
 	"path/filepath"
@@ -49,8 +50,10 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 const (
-	timeout  = time.Second * 10
-	interval = time.Millisecond * 250
+	timeout      = time.Second * 10
+	interval     = time.Millisecond * 250
+	syncPeriod   = time.Millisecond * 250
+	pollInterval = time.Millisecond * 100
 )
 
 var cfg *rest.Config
@@ -107,12 +110,13 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	fakeClient = &smclientfakes.FakeClient{}
-
+	testConfig := config.Config{SyncPeriod: syncPeriod, PollInterval: pollInterval}
 	err = (&ServiceInstanceReconciler{
 		Client:   k8sManager.GetClient(),
 		Scheme:   k8sManager.GetScheme(),
 		Log:      ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
 		SMClient: func() smclient.Client { return fakeClient },
+		Config:   testConfig,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -124,6 +128,7 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme:   k8sManager.GetScheme(),
 		Log:      ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
 		SMClient: func() smclient.Client { return fakeClient },
+		Config:   testConfig,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -164,6 +169,10 @@ var _ = AfterSuite(func() {
 
 func isReady(resource internal.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == v1alpha1.ConditionTrue
+}
+
+func isInProgress(resource internal.SAPCPResource) bool {
+	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == v1alpha1.ConditionFalse
 }
 
 func isFailed(resource internal.SAPCPResource) bool {

@@ -1,13 +1,8 @@
 apiVersion: services.cloud.sap.com/v1alpha1
 kind: ServiceInstance
 metadata:
-  name: eyaln-test-k8s-demo-1
+  name: sample-instance-1
 spec:
-  externalName: eyaln-test-k8s-demo-1
-  serviceOfferingName: xsuaa
-  servicePlanName: application
-  labels:
-    my-label:
-      - my-value
-  parameters:
-    xsappname: eyaln-test-k8s-demo-1
+  externalName: sample-instance-1
+  serviceOfferingName: service-manager
+  servicePlanName: subaccount-admin
