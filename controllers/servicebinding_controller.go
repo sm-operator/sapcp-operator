@@ -47,7 +47,7 @@ type ServiceBindingReconciler struct {
 	client.Client
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
-	SMClient smclient.Client
+	SMClient func() smclient.Client
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=servicebindings,verbs=get;list;watch;create;update;patch;delete
@@ -198,7 +198,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 					}
 				}
 
-				return ctrl.Result{}, nil
+				return ctrl.Result{}, err
 			}
 
 			if operationURL != "" {
@@ -505,7 +505,7 @@ func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Logger) (smclient.Client, error) {
 	if r.SMClient != nil {
-		return r.SMClient, nil
+		return r.SMClient(), nil
 	}
 
 	return getSMClient(ctx, r, log)

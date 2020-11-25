@@ -42,7 +42,7 @@ type ServiceInstanceReconciler struct {
 	client.Client
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
-	SMClient smclient.Client
+	SMClient func() smclient.Client
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances,verbs=get;list;watch;create;update;patch;delete
@@ -415,7 +415,7 @@ func (r *ServiceInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *ServiceInstanceReconciler) getSMClient(ctx context.Context, log logr.Logger) (smclient.Client, error) {
 	if r.SMClient != nil {
-		return r.SMClient, nil
+		return r.SMClient(), nil
 	}
 	return getSMClient(ctx, r, log)
 }
