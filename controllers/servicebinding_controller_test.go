@@ -25,7 +25,7 @@ const (
 	fakeBindingID = "fake-binding-id"
 )
 
-var _ = Describe("ServiceBinding controller", func() {
+var _ = FDescribe("ServiceBinding controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	instanceName := "test-instance"
@@ -469,7 +469,7 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 			})
 
-			XWhen("polling ends with failure", func() {
+			When("polling ends with failure", func() {
 				errorMessage := "delete-binding-async-error"
 				JustBeforeEach(func() {
 					fakeClient.StatusReturns(&smclientTypes.Operation{
