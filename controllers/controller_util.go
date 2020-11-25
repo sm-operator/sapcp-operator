@@ -17,6 +17,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	Created = "Created"
+	Updated = "Updated"
+	Deleted = "Deleted"
+
+	CreateInProgress = "CreateInProgress"
+	UpdateInProgress = "UpdateInProgress"
+	DeleteInProgress = "DeleteInProgress"
+
+	CreateFailed = "CreateFailed"
+	UpdateFailed = "UpdateFailed"
+	DeleteFailed = "DeleteFailed"
+
+	Unknown = "Unknown"
+)
+
 // Helper functions to check and remove string from a slice of strings.
 func containsString(slice []string, s string) bool {
 	for _, item := range slice {
@@ -72,10 +88,6 @@ func normalizeCredentials(credentialsJSON json.RawMessage) (map[string][]byte, e
 		normalized[keyString] = []byte(strVal)
 	}
 	return normalized, nil
-}
-
-func getConditionReason(opType smTypes.OperationCategory, opState smTypes.OperationState) string {
-	return fmt.Sprintf("%s %s", opType, opState)
 }
 
 func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SAPCPResource) {
@@ -206,4 +218,35 @@ func getSMSecret(ctx context.Context, r client.Client, log logr.Logger, namespac
 	}
 
 	return secret.Data, nil
+}
+
+func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {
+	switch state {
+	case smTypes.SUCCEEDED:
+		if opType == smTypes.CREATE {
+			return Created
+		} else if opType == smTypes.UPDATE {
+			return Updated
+		} else if opType == smTypes.DELETE {
+			return Deleted
+		}
+	case smTypes.IN_PROGRESS, smTypes.PENDING:
+		if opType == smTypes.CREATE {
+			return CreateInProgress
+		} else if opType == smTypes.UPDATE {
+			return UpdateInProgress
+		} else if opType == smTypes.DELETE {
+			return DeleteInProgress
+		}
+	case smTypes.FAILED:
+		if opType == smTypes.CREATE {
+			return CreateFailed
+		} else if opType == smTypes.UPDATE {
+			return UpdateFailed
+		} else if opType == smTypes.DELETE {
+			return DeleteFailed
+		}
+	}
+
+	return Unknown
 }

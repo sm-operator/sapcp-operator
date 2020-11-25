@@ -31,9 +31,11 @@ type ServiceInstanceSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// The name of the service offering
+	// +kubebuilder:validation:MinLength=1
 	ServiceOfferingName string `json:"serviceOfferingName"`
 
 	// The name of the service plan
+	// +kubebuilder:validation:MinLength=1
 	ServicePlanName string `json:"servicePlanName"`
 
 	// The plan ID in case service offering and plan name are ambiguous
