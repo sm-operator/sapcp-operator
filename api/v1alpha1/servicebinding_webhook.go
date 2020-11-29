@@ -80,7 +80,7 @@ func (r *ServiceBinding) specChanged(old runtime.Object) bool {
 		r.Spec.ServiceInstanceName != oldBinding.Spec.ServiceInstanceName ||
 		// TODO labels
 		//r.Spec.Labels != oldBinding.Spec.Labels ||
-		r.Spec.Parameters != oldBinding.Spec.Parameters
+		r.Spec.Parameters.String() != oldBinding.Spec.Parameters.String()
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type

@@ -16,7 +16,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"time"
 )
 
 // +kubebuilder:docs-gen:collapse=Imports
@@ -52,6 +54,9 @@ var _ = Describe("ServiceBinding controller", func() {
 		binding := newBinding(name, namespace)
 		binding.Spec.ServiceInstanceName = instanceName
 		binding.Spec.ExternalName = externalName
+		binding.Spec.Parameters = &runtime.RawExtension{
+			Raw: []byte(`{"key": "value"}`),
+		}
 
 		if err := k8sClient.Create(ctx, binding); err != nil {
 			return nil, err
@@ -229,7 +234,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 
 					It("should fail with the error returned from SM", func() {
-						createBindingWithError(context.Background(), bindingName, namespace, instanceName, "existing-name",
+						createBindingWithError(context.Background(), bindingName, namespace, instanceName, "binding-external-name",
 							errorMessage)
 					})
 				})
@@ -280,15 +285,50 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 			})
 
-			XWhen("referenced service instance is failed", func() {
-				It("should retry and succeed once the instance is fixed?", func() {
-					// TODO what is the expected behaviour?
+			When("referenced service instance is failed", func() {
+				JustBeforeEach(func() {
+					setFailureConditions(smTypes.CREATE, "Failed to create instance (test)", createdInstance)
+					err := k8sClient.Status().Update(context.Background(), createdInstance)
+					Expect(err).ToNot(HaveOccurred())
+				})
+				It("should retry and succeed once the instance is ready", func() {
+					// verify create fail with appropriate message
+					createBindingWithError(context.Background(), bindingName, namespace, instanceName, "binding-external-name",
+						"is not usable")
+
+					// verify creation is retired and succeeds after instance is ready
+					setSuccessConditions(smTypes.CREATE, createdInstance)
+					err := k8sClient.Status().Update(context.Background(), createdInstance)
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(func() bool {
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						return err == nil && isReady(createdBinding)
+					}, syncPeriod+time.Second, interval).Should(BeTrue())
 				})
 			})
 
-			XWhen("referenced service instance is not ready", func() {
+			When("referenced service instance is not ready", func() {
+				JustBeforeEach(func() {
+					setInProgressCondition(smTypes.CREATE, "", createdInstance)
+					err := k8sClient.Status().Update(context.Background(), createdInstance)
+					Expect(err).ToNot(HaveOccurred())
+				})
 				It("should retry and succeed once the instance is ready", func() {
-					// TODO
+					var err error
+					createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, namespace, instanceName, "binding-external-name", false)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(isInProgress(createdBinding)).To(BeTrue())
+
+					// verify creation is retired and succeeds after instance is ready
+					setSuccessConditions(smTypes.CREATE, createdInstance)
+					err = k8sClient.Status().Update(context.Background(), createdInstance)
+					Expect(err).ToNot(HaveOccurred())
+
+					Eventually(func() bool {
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						return err == nil && isReady(createdBinding)
+					}, pollInterval+time.Second, interval).Should(BeTrue())
 				})
 			})
 		})
@@ -376,11 +416,46 @@ var _ = Describe("ServiceBinding controller", func() {
 	})
 
 	Context("Update", func() {
-		XWhen("spec is changed", func() {
+		JustBeforeEach(func() {
+			createdBinding = createBinding(context.Background(), bindingName, namespace, instanceName, "binding-external-name")
+			Expect(isReady(createdBinding)).To(BeTrue())
+		})
+
+		When("external name is changed", func() {
 			It("should fail", func() {
-				//TODO
+				createdBinding.Spec.ExternalName = "new-external-name"
+				err := k8sClient.Update(context.Background(), createdBinding)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
 			})
 		})
+
+		When("service instance name is changed", func() {
+			It("should fail", func() {
+				createdBinding.Spec.ServiceInstanceName = "new-instance-name"
+				err := k8sClient.Update(context.Background(), createdBinding)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
+			})
+		})
+
+		When("parameters are changed", func() {
+			It("should fail", func() {
+				createdBinding.Spec.Parameters = &runtime.RawExtension{
+					Raw: []byte(`{"new-key": "new-value"}`),
+				}
+				err := k8sClient.Update(context.Background(), createdBinding)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
+			})
+		})
+
+		XWhen("labels are changed", func() {
+			It("should fail", func() {
+				// TODO labels
+			})
+		})
+
 	})
 
 	Context("Delete", func() {

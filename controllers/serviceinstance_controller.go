@@ -43,6 +43,7 @@ type ServiceInstanceReconciler struct {
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
 	SMClient func() smclient.Client
+	Config   config.Config
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances,verbs=get;list;watch;create;update;patch;delete
@@ -85,7 +86,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		case string(smTypes.IN_PROGRESS):
 			fallthrough
 		case string(smTypes.PENDING):
-			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 		case string(smTypes.FAILED):
 			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceInstance)
 			if serviceInstance.Status.OperationType == smTypes.DELETE {
@@ -181,7 +182,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 					return ctrl.Result{}, err
 				}
 
-				return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
+				return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 			}
 			log.Info("Instance was deleted successfully")
 			serviceInstance.Status.InstanceID = ""
@@ -239,7 +240,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		instances, err := smClient.ListInstances(&parameters)
 		if err != nil {
 			log.Error(err, "failed to list instances in SM")
-			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().SyncPeriod}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
 		}
 		if instances != nil && len(instances.ServiceInstances) == 1 {
 			log.Info(fmt.Sprintf("found existing instance in SM with id %s, updating status", instances.ServiceInstances[0].ID))
@@ -300,7 +301,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 				return ctrl.Result{}, err
 			}
 
-			return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 		}
 		log.Info("Instance provisioned successfully")
 		setSuccessConditions(smTypes.CREATE, serviceInstance)
@@ -309,6 +310,8 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			log.Error(err, "unable to update ServiceInstance status")
 			return ctrl.Result{}, err
 		}
+
+		log.Info("updated ServiceInstance status in k8s")
 
 		return ctrl.Result{}, nil
 	}
@@ -356,7 +359,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{Requeue: true, RequeueAfter: config.Get().PollInterval}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 	log.Info("Instance updated successfully")
 	setSuccessConditions(smTypes.UPDATE, serviceInstance)
