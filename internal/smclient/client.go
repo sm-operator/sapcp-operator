@@ -37,6 +37,8 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
+//TODO test client package
+
 // Client should be implemented by SM clients
 //go:generate counterfeiter . Client
 type Client interface {

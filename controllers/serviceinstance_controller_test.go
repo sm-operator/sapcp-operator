@@ -316,6 +316,9 @@ var _ = Describe("ServiceInstance controller", func() {
 			serviceInstance = createInstance(ctx, instanceSpec)
 			Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
 		})
+
+		//TODO test case for update during another async update, should wait for the current one to finish and then apply the next
+
 		Context("When update call to SM succeed", func() {
 			Context("Sync", func() {
 				When("spec is changed", func() {

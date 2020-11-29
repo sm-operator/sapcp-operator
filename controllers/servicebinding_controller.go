@@ -58,10 +58,8 @@ type ServiceBindingReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	//TODO configuration mechanism for the operator - env, yaml files, config maps?
-
 	ctx := context.Background()
-	//TODO optimize log - use withValue where possible
+	// TODO optimize log - use withValue where possible
 	log := r.Log.WithValues("servicebinding", req.NamespacedName)
 
 	// your logic here
@@ -80,7 +78,6 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
 		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
-		//TODO set client config
 		smClient, err := r.getSMClient(ctx, log)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -89,7 +86,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		status, err := smClient.Status(serviceBinding.Status.OperationURL, nil)
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceBinding.Status.OperationURL)
-			// TODO handle errors to fetch operation - should resync state from SM
+			// + TODO handle errors to fetch operation - should resync state from SM
 			return ctrl.Result{}, err
 		}
 
@@ -202,7 +199,11 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 					return ctrl.Result{}, nil
 				}
 
-				//	//TODO handle non transient errors
+				// TODO handle non transient errors
+				// 4** - standard backoff
+				// 5** - ?
+				// 429 - long wait
+				// ...
 				log.Error(err, "failed to delete binding")
 				// if fail to delete the binding in SM, return with error
 				// so that it can be retried
