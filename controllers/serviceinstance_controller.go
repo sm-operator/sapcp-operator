@@ -311,6 +311,8 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			return ctrl.Result{}, err
 		}
 
+		log.Info("updated ServiceInstance status in k8s")
+
 		return ctrl.Result{}, nil
 	}
 
