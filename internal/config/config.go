@@ -17,6 +17,7 @@ type Config struct {
 	PollInterval           time.Duration `envconfig:"poll_interval"`
 	ManagementNamespace    string        `envconfig:"management_namespace"`
 	EnableNamespaceSecrets bool          `envconfig:"enable_namespace_secrets"`
+	ClusterID              string        `envconfig:"cluster_id"`
 }
 
 func Get() Config {

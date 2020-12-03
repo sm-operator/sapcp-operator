@@ -62,7 +62,7 @@ func (sr *SecretResolver) GetSecretForResource(ctx context.Context, resource con
 
 	if !found {
 		// secret not found anywhere
-		return nil, fmt.Errorf("cannot find sapcp operator secret for namespace %s", resource.GetName())
+		return nil, fmt.Errorf("cannot find sapcp operator secret")
 	}
 
 	if err := validateSAPCPOperatorSecret(secretForResource); err != nil {
