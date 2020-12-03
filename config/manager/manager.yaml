@@ -28,7 +28,11 @@ spec:
         args:
         - --enable-leader-election
         image: controller:latest
+        imagePullPolicy: Always #TODO remove this
         name: manager
+        env:
+          - name: MANAGEMENT_NAMESPACE
+            value: sapcp-operator-system
         resources:
           limits:
             cpu: 100m

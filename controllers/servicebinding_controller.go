@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/sm-operator/sapcp-operator/internal/secrets"
+
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
@@ -45,10 +47,11 @@ const bindingFinalizerName string = "storage.finalizers.peripli.io.service-manag
 // ServiceBindingReconciler reconciles a ServiceBinding object
 type ServiceBindingReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
-	SMClient func() smclient.Client
-	Config   config.Config
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	SMClient       func() smclient.Client
+	Config         config.Config
+	SecretResolver *secrets.SecretResolver
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=servicebindings,verbs=get;list;watch;create;update;patch;delete
@@ -58,10 +61,8 @@ type ServiceBindingReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	//TODO configuration mechanism for the operator - env, yaml files, config maps?
-
 	ctx := context.Background()
-	//TODO optimize log - use withValue where possible
+	// TODO optimize log - use withValue where possible
 	log := r.Log.WithValues("servicebinding", req.NamespacedName)
 
 	// your logic here
@@ -80,16 +81,20 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
 		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
-		//TODO set client config
-		smClient, err := r.getSMClient(ctx, log)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding)
 		if err != nil {
+			setFailureConditions(serviceBinding.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
+			if err := r.Status().Update(ctx, serviceBinding); err != nil {
+				log.Error(err, "unable to update ServiceBinding status")
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
 
 		status, err := smClient.Status(serviceBinding.Status.OperationURL, nil)
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceBinding.Status.OperationURL)
-			// TODO handle errors to fetch operation - should resync state from SM
+			// + TODO handle errors to fetch operation - should resync state from SM
 			return ctrl.Result{}, err
 		}
 
@@ -170,8 +175,13 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			}
 
 			// our finalizer is present, so we need to delete the binding in SM
-			smClient, err := r.getSMClient(ctx, log)
+			smClient, err := r.getSMClient(ctx, log, serviceBinding)
 			if err != nil {
+				setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
+				if err := r.Status().Update(ctx, serviceBinding); err != nil {
+					log.Error(err, "unable to update ServiceBinding status")
+					return ctrl.Result{}, err
+				}
 				return ctrl.Result{}, err
 			}
 
@@ -202,7 +212,11 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 					return ctrl.Result{}, nil
 				}
 
-				//	//TODO handle non transient errors
+				// TODO + handle non transient errors
+				// 4** - standard backoff
+				// 5** - ?
+				// 429 - long wait
+				// ...
 				log.Error(err, "failed to delete binding")
 				// if fail to delete the binding in SM, return with error
 				// so that it can be retried
@@ -313,8 +327,13 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if serviceBinding.Status.BindingID == "" {
 		log.Info("Binding ID is empty, checking if exist in SM")
 
-		smClient, err := r.getSMClient(ctx, log)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding)
 		if err != nil {
+			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
+			if err := r.Status().Update(ctx, serviceBinding); err != nil {
+				log.Error(err, "unable to update ServiceBinding status")
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
 		parameters := smclient.Parameters{
@@ -517,12 +536,17 @@ func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Logger) (smclient.Client, error) {
+func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Logger, binding *v1alpha1.ServiceBinding) (smclient.Client, error) {
 	if r.SMClient != nil {
 		return r.SMClient(), nil
 	}
 
-	return getSMClient(ctx, r, log)
+	secret, err := r.SecretResolver.GetSecretForResource(ctx, binding)
+	if err != nil {
+		return nil, err
+	}
+
+	return getSMClient(ctx, secret, log)
 }
 
 func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {

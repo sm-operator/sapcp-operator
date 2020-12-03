@@ -14,7 +14,6 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -189,15 +188,16 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 	return false
 }
 
-func getSMClient(ctx context.Context, r client.Client, log logr.Logger) (smclient.Client, error) {
-	secretData, err := getSMSecret(ctx, r, log, "default")
-	if err != nil {
-		return nil, err
+func getSMClient(ctx context.Context, secret *corev1.Secret, log logr.Logger) (smclient.Client, error) {
+	if secret == nil {
+		return nil, fmt.Errorf("cannot create SM client - secret is missing")
 	}
-	cl, err := smclient.NewClient(ctx, string(secretData["subdomain"]), &smclient.ClientConfig{
+	secretData := secret.Data
+	cl, err := smclient.NewClient(ctx, &smclient.ClientConfig{
 		ClientID:     string(secretData["clientid"]),
 		ClientSecret: string(secretData["clientsecret"]),
 		URL:          string(secretData["url"]),
+		Subdomain:    string(secretData["subdomain"]),
 		SSLDisabled:  false,
 	}, nil)
 
@@ -207,17 +207,6 @@ func getSMClient(ctx context.Context, r client.Client, log logr.Logger) (smclien
 	}
 	return cl, nil
 
-}
-
-func getSMSecret(ctx context.Context, r client.Client, log logr.Logger, namespace string) (map[string][]byte, error) {
-	log.Info("getting SM secret sapcp-operator")
-
-	var secret corev1.Secret
-	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: "sapcp-operator"}, &secret); err != nil {
-		log.Error(err, "secret not found")
-	}
-
-	return secret.Data, nil
 }
 
 func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {

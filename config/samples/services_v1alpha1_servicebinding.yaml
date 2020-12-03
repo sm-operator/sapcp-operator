@@ -2,6 +2,7 @@ apiVersion: services.cloud.sap.com/v1alpha1
 kind: ServiceBinding
 metadata:
   name: sample-binding-1
+  namespace: test
 spec:
   externalName: sample-binding-1
   serviceInstanceName: sample-instance-1

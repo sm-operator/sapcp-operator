@@ -18,10 +18,8 @@ package smclient
 
 // ClientConfig contains the configuration of the Service Manager client
 type ClientConfig struct {
-	URL string
-
-	User         string
-	Password     string
+	URL          string
+	Subdomain    string
 	ClientID     string
 	ClientSecret string
 

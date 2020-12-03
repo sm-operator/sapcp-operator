@@ -533,7 +533,7 @@ var _ = Describe("Instance test", func() {
 
 		Context("When invalid config is set", func() {
 			It("should return error", func() {
-				client, _ = smclient.NewClient(context.TODO(), "subdomain", &smclient.ClientConfig{URL: "invalidURL"}, fakeAuthClient)
+				client, _ = smclient.NewClient(context.TODO(), &smclient.ClientConfig{URL: "invalidURL"}, fakeAuthClient)
 				_, location, err := client.UpdateInstance(instance.ID, instance, params)
 
 				Expect(err).Should(HaveOccurred())

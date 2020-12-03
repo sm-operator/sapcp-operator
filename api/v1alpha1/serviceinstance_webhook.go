@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -48,31 +47,4 @@ func (r *ServiceInstance) Default() {
 	}
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// +kubebuilder:webhook:verbs=create;update,path=/validate-services-cloud-sap-com-v1alpha1-serviceinstance,mutating=false,failurePolicy=fail,groups=services.cloud.sap.com,resources=serviceinstances,versions=v1alpha1,name=vserviceinstance.kb.io
-
-var _ webhook.Validator = &ServiceInstance{}
-
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *ServiceInstance) ValidateCreate() error {
-	serviceinstancelog.Info("validate create", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object creation.
-	return nil
-}
-
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *ServiceInstance) ValidateUpdate(old runtime.Object) error {
-	serviceinstancelog.Info("validate update", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object update.
-	return nil
-}
-
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *ServiceInstance) ValidateDelete() error {
-	serviceinstancelog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
-	return nil
-}
+// TODO + validate secret exist for resource - requires api client - add validator again
