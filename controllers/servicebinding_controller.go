@@ -212,7 +212,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 					return ctrl.Result{}, nil
 				}
 
-				// TODO handle non transient errors
+				// TODO + handle non transient errors
 				// 4** - standard backoff
 				// 5** - ?
 				// 429 - long wait

@@ -85,7 +85,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceInstance.Status.OperationURL)
-			// TODO handle errors to fetch operation - should resync state from SM
+			// TODO + handle errors to fetch operation - should resync state from SM
 			return ctrl.Result{}, err
 		}
 
@@ -171,7 +171,11 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 					return ctrl.Result{}, err
 				}
 
-				//	//TODO handle non transient errors
+				// TODO + handle non transient errors
+				// 4** - standard backoff
+				// 5** - ?
+				// 429 - long wait
+				// ...
 				log.Error(err, "failed to delete instance")
 				// if fail to delete the instance in SM, return with error
 				// so that it can be retried

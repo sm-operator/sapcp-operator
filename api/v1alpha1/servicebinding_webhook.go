@@ -59,6 +59,7 @@ var _ webhook.Validator = &ServiceBinding{}
 func (r *ServiceBinding) ValidateCreate() error {
 	servicebindinglog.Info("validate create", "name", r.Name)
 
+	// TODO + validate secret exist for resource - requires api client
 	// TODO + validate instance exist in same namespace - requires api client - do we want to allow creation of binding
 	// without an existing instance? if not, it will require applying CRD in specific order
 	return nil
