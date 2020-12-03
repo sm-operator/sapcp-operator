@@ -20,6 +20,9 @@ import (
 	"flag"
 	"os"
 
+	"github.com/sm-operator/sapcp-operator/internal/secrets"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/sm-operator/sapcp-operator/internal/config"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -68,20 +71,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	secretResolver := &secrets.SecretResolver{
+		ManagementNamespace:    config.Get().ManagementNamespace,
+		EnableNamespaceSecrets: config.Get().EnableNamespaceSecrets,
+		Client:                 mgr.GetClient(),
+		Log:                    logf.Log.WithName("secret-resolver"),
+	}
+
 	if err = (&controllers.ServiceInstanceReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
-		Scheme: mgr.GetScheme(),
-		Config: config.Get(),
+		Client:         mgr.GetClient(),
+		Log:            ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
+		Scheme:         mgr.GetScheme(),
+		Config:         config.Get(),
+		SecretResolver: secretResolver,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceInstance")
 		os.Exit(1)
 	}
 	if err = (&controllers.ServiceBindingReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
-		Scheme: mgr.GetScheme(),
-		Config: config.Get(),
+		Client:         mgr.GetClient(),
+		Log:            ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
+		Scheme:         mgr.GetScheme(),
+		Config:         config.Get(),
+		SecretResolver: secretResolver,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceBinding")
 		os.Exit(1)

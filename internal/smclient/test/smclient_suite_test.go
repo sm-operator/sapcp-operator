@@ -84,6 +84,6 @@ var _ = JustBeforeEach(func() {
 	smServer = httptest.NewServer(createSMHandler())
 	fakeAuthClient = &FakeAuthClient{AccessToken: validToken}
 	var err error
-	client, err = smclient.NewClient(context.TODO(), "subdomain", &smclient.ClientConfig{URL: smServer.URL}, fakeAuthClient)
+	client, err = smclient.NewClient(context.TODO(), &smclient.ClientConfig{URL: smServer.URL}, fakeAuthClient)
 	Expect(err).ToNot(HaveOccurred())
 })

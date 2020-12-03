@@ -80,7 +80,7 @@ type serviceManagerClient struct {
 }
 
 // NewClientWithAuth returns new SM Client configured with the provided configuration
-func NewClient(ctx context.Context, subdomain string, config *ClientConfig, httpClient auth.HTTPClient) (Client, error) {
+func NewClient(ctx context.Context, config *ClientConfig, httpClient auth.HTTPClient) (Client, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	} else {
@@ -88,9 +88,9 @@ func NewClient(ctx context.Context, subdomain string, config *ClientConfig, http
 	}
 	client := &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}
 	var params *Parameters
-	if len(subdomain) > 0 {
+	if len(config.Subdomain) > 0 {
 		params = &Parameters{
-			GeneralParams: []string{"subdomain=" + subdomain},
+			GeneralParams: []string{"subdomain=" + config.Subdomain},
 		}
 	}
 

@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/sm-operator/sapcp-operator/internal/secrets"
+
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
@@ -40,10 +42,11 @@ const instanceFinalizerName string = "storage.finalizers.peripli.io.service-mana
 // ServiceInstanceReconciler reconciles a ServiceInstance object
 type ServiceInstanceReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
-	SMClient func() smclient.Client
-	Config   config.Config
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	SMClient       func() smclient.Client
+	Config         config.Config
+	SecretResolver *secrets.SecretResolver
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances,verbs=get;list;watch;create;update;patch;delete
@@ -69,9 +72,13 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	if len(serviceInstance.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
 		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceInstance.Status.OperationURL))
-		//TODO set client config
-		smClient, err := r.getSMClient(ctx, log)
+		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
+			setFailureConditions(serviceInstance.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
+			if err := r.Status().Update(ctx, serviceInstance); err != nil {
+				log.Error(err, "unable to update ServiceInstance status")
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
 
@@ -133,8 +140,13 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			}
 
 			// our finalizer is present, so we need to delete the instance in SM
-			smClient, err := r.getSMClient(ctx, log)
+			smClient, err := r.getSMClient(ctx, log, serviceInstance)
 			if err != nil {
+				setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
 				return ctrl.Result{}, err
 			}
 
@@ -222,8 +234,13 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	if serviceInstance.Status.InstanceID == "" {
 		log.Info("Instance ID is empty, checking if instance exist in SM")
 
-		smClient, err := r.getSMClient(ctx, log)
+		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
+			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
+			if err := r.Status().Update(ctx, serviceInstance); err != nil {
+				log.Error(err, "unable to update ServiceInstance status")
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
 		parameters := smclient.Parameters{
@@ -317,8 +334,13 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	}
 
 	log.Info(fmt.Sprintf("Updating instance with ID %s", serviceInstance.Status.InstanceID))
-	smClient, err := r.getSMClient(ctx, log)
+	smClient, err := r.getSMClient(ctx, log, serviceInstance)
 	if err != nil {
+		setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
+		if err := r.Status().Update(ctx, serviceInstance); err != nil {
+			log.Error(err, "unable to update ServiceInstance status")
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -411,11 +433,17 @@ func (r *ServiceInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *ServiceInstanceReconciler) getSMClient(ctx context.Context, log logr.Logger) (smclient.Client, error) {
+func (r *ServiceInstanceReconciler) getSMClient(ctx context.Context, log logr.Logger, instance *servicesv1alpha1.ServiceInstance) (smclient.Client, error) {
 	if r.SMClient != nil {
 		return r.SMClient(), nil
 	}
-	return getSMClient(ctx, r, log)
+
+	secret, err := r.SecretResolver.GetSecretForResource(ctx, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	return getSMClient(ctx, secret, log)
 }
 
 func getInstanceParameters(serviceInstance *servicesv1alpha1.ServiceInstance) (json.RawMessage, error) {
