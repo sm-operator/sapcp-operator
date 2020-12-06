@@ -10,6 +10,7 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -52,6 +53,14 @@ var _ = Describe("Secrets Resolver", func() {
 
 		err := k8sClient.Create(ctx, newSecret)
 		Expect(err).ToNot(HaveOccurred())
+
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: newSecret.Name, Namespace: newSecret.Namespace}, newSecret)
+			if err != nil {
+				return false
+			}
+			return len(newSecret.Data) > 0
+		}, timeout, interval).Should(BeTrue())
 
 		return newSecret
 	}

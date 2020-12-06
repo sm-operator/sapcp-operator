@@ -12,6 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+//TODO + revisit the name based approach for managed secret, replace with label based mechanism + admission webhook for secrets to avoid duplications
+
 const (
 	SAPCPOperatorSecretName = "sapcp-operator-secret"
 )
