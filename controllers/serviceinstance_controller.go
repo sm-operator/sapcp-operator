@@ -252,7 +252,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 				fmt.Sprintf("name eq '%s'", serviceInstance.Spec.ExternalName),
 				fmt.Sprintf("service_plan_id eq '%s'", serviceInstance.Spec.ServicePlanID)},
 			LabelQuery: []string{
-				fmt.Sprintf("_clusterid eq '%s'", "some-cluster-id"),
+				fmt.Sprintf("_clusterid eq '%s'", r.Config.ClusterID),
 				fmt.Sprintf("_namespace eq '%s'", serviceInstance.Namespace),
 				fmt.Sprintf("_k8sname eq '%s'", serviceInstance.Name)},
 			GeneralParams: []string{"attach_last_operations=true"},
@@ -279,7 +279,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		// add labels that can be used to construct OSB context in SM
 		labels["_namespace"] = []string{serviceInstance.Namespace}
 		labels["_k8sname"] = []string{serviceInstance.Name}
-		labels["_clusterid"] = []string{"some-cluster-id"} //TODO maintain a stable cluster ID to pass in context
+		labels["_clusterid"] = []string{r.Config.ClusterID}
 
 		serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 

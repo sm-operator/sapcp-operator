@@ -85,6 +85,7 @@ var _ = BeforeSuite(func(done Done) {
 		Expect(err).ToNot(HaveOccurred())
 	}()
 
+	k8sManager.GetCache().WaitForCacheSync(nil)
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 

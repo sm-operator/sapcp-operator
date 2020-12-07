@@ -30,9 +30,9 @@ spec:
         image: controller:latest
         imagePullPolicy: Always #TODO remove this
         name: manager
-        env:
-          - name: MANAGEMENT_NAMESPACE
-            value: sapcp-operator-system
+        envFrom:
+          - configMapRef:
+              name: sapcp-operator-config
         resources:
           limits:
             cpu: 100m
