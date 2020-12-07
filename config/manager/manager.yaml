@@ -32,7 +32,7 @@ spec:
         name: manager
         envFrom:
           - configMapRef:
-              name: cluster-config
+              name: sapcp-operator-config
         resources:
           limits:
             cpu: 100m

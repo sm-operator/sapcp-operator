@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cluster-config
-  namespace: sapcp-operator-system
-data:
-  MANAGEMENT_NAMESPACE: sapcp-operator-system
-  CLUSTER_ID: "123456789"

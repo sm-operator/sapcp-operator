@@ -385,7 +385,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		// add labels that can be used to construct OSB context in SM
 		labels["_namespace"] = []string{serviceInstance.Namespace}
 		labels["_k8sname"] = []string{serviceBinding.Name}
-		labels["_clusterid"] = []string{r.Config.ClusterID} //TODO maintain a stable cluster ID to pass in context
+		labels["_clusterid"] = []string{r.Config.ClusterID}
 
 		bindingParameters, err := getBindingParameters(serviceBinding)
 		if err != nil {

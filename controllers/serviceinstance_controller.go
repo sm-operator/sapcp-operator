@@ -279,7 +279,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		// add labels that can be used to construct OSB context in SM
 		labels["_namespace"] = []string{serviceInstance.Namespace}
 		labels["_k8sname"] = []string{serviceInstance.Name}
-		labels["_clusterid"] = []string{r.Config.ClusterID} //TODO maintain a stable cluster ID to pass in context
+		labels["_clusterid"] = []string{r.Config.ClusterID}
 
 		serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 
