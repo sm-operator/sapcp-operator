@@ -85,8 +85,21 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceInstance.Status.OperationURL)
-			// TODO + handle errors to fetch operation - should resync state from SM
-			return ctrl.Result{}, err
+			smErr := err.(*smclient.ServiceManagerError)
+			if smErr != nil && smErr.StatusCode == http.StatusNotFound {
+				log.Info("Operation % does not exist in SM, resyncing..")
+				smInstance, err := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, nil)
+				if err != nil {
+					log.Error(err, "unable to get ServiceInstance from SM")
+					return ctrl.Result{}, err
+				}
+				r.resyncInstanceStatus(serviceInstance, *smInstance)
+				if err := r.Status().Update(ctx, serviceInstance); err != nil {
+					log.Error(err, "unable to update ServiceInstance status")
+					return ctrl.Result{}, err
+				}
+			}
+			return ctrl.Result{}, nil
 		}
 
 		switch status.State {
@@ -400,6 +413,8 @@ func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1
 	//set observed generation to 0 because we dont know which generation the current state in SM represents
 	k8sInstance.Status.ObservedGeneration = 0
 	k8sInstance.Status.InstanceID = smInstance.ID
+	k8sInstance.Status.OperationURL = ""
+	k8sInstance.Status.OperationType = ""
 	switch smInstance.LastOperation.State {
 	case smTypes.PENDING:
 		fallthrough

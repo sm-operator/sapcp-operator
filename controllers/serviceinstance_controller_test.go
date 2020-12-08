@@ -312,7 +312,6 @@ var _ = Describe("ServiceInstance controller", func() {
 		}
 
 		JustBeforeEach(func() {
-			serviceInstance.Spec = instanceSpec
 			serviceInstance = createInstance(ctx, instanceSpec)
 			Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
 		})
@@ -379,15 +378,15 @@ var _ = Describe("ServiceInstance controller", func() {
 				})
 			})
 			Context("Async", func() {
+				BeforeEach(func() {
+					fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operation/1234", nil)
+					fakeClient.StatusReturns(&types2.Operation{
+						ID:    "1234",
+						Type:  string(smTypes.UPDATE),
+						State: string(smTypes.IN_PROGRESS),
+					}, nil)
+				})
 				When("spec is changed", func() {
-					BeforeEach(func() {
-						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operation/1234", nil)
-						fakeClient.StatusReturns(&types2.Operation{
-							ID:    "1234",
-							Type:  string(smTypes.UPDATE),
-							State: string(smTypes.IN_PROGRESS),
-						}, nil)
-					})
 					It("condition should be updated from in progress to Updated", func() {
 						serviceInstance.Spec = updateSpec
 						updatedInstance := updateInstance(serviceInstance)
@@ -400,6 +399,27 @@ var _ = Describe("ServiceInstance controller", func() {
 						Eventually(func() bool {
 							err := k8sClient.Get(ctx, defaultLookupKey, updatedInstance)
 							if err != nil || len(updatedInstance.Status.Conditions) != 2 || updatedInstance.Status.Conditions[0].Reason != UpdateFailed {
+								return false
+							}
+							return true
+						}, timeout*2, interval).Should(BeTrue())
+					})
+				})
+
+				When("Instance has operation url to operation that no longer exist in SM", func() {
+					JustBeforeEach(func() {
+						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operation/1234", nil)
+						serviceInstance.Spec = updateSpec
+						updatedInstance := updateInstance(serviceInstance)
+						Expect(updatedInstance.Status.OperationURL).To(Not(BeEmpty()))
+
+						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
+						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}, nil)
+					})
+					It("should not fail", func() {
+						Eventually(func() bool {
+							err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
+							if err != nil || len(serviceInstance.Status.Conditions) != 1 || serviceInstance.Status.Conditions[0].Reason != Updated {
 								return false
 							}
 							return true
