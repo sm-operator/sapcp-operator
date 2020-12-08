@@ -408,13 +408,12 @@ var _ = Describe("ServiceInstance controller", func() {
 
 				When("Instance has operation url to operation that no longer exist in SM", func() {
 					JustBeforeEach(func() {
+						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}, nil)
+						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operation/1234", nil)
 						serviceInstance.Spec = updateSpec
 						updatedInstance := updateInstance(serviceInstance)
 						Expect(updatedInstance.Status.OperationURL).To(Not(BeEmpty()))
-
-						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
-						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}, nil)
 					})
 					It("should not fail", func() {
 						Eventually(func() bool {
