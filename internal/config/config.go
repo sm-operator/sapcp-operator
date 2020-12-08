@@ -15,6 +15,7 @@ var (
 type Config struct {
 	SyncPeriod             time.Duration `envconfig:"sync_period"`
 	PollInterval           time.Duration `envconfig:"poll_interval"`
+	LongPollInterval       time.Duration `envconfig:"long_poll_interval"`
 	ManagementNamespace    string        `envconfig:"management_namespace"`
 	EnableNamespaceSecrets bool          `envconfig:"enable_namespace_secrets"`
 	ClusterID              string        `envconfig:"cluster_id"`
@@ -25,6 +26,7 @@ func Get() Config {
 		config = Config{ // default values
 			SyncPeriod:             60 * time.Second,
 			PollInterval:           10 * time.Second,
+			LongPollInterval:       60 * time.Second,
 			EnableNamespaceSecrets: true,
 		}
 		envconfig.MustProcess("", &config)

@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	types2 "k8s.io/apimachinery/pkg/types"
 	"net/http"
 
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
@@ -86,12 +85,11 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceInstance.Status.OperationURL)
-			smErr := err.(*smclient.ServiceManagerError)
-			if smErr != nil && smErr.StatusCode == http.StatusNotFound {
+			if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 				log.Info("Operation % does not exist in SM, resyncing..")
 				smInstance, err := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, nil)
 				if err != nil {
-					log.Error(err, "unable to get ServiceInstance from SM")
+					log.Error(err, fmt.Sprintf("unable to get ServiceInstance with id %s from SM", serviceInstance.Status.InstanceID))
 					return ctrl.Result{}, err
 				}
 				r.resyncInstanceStatus(serviceInstance, *smInstance)
@@ -167,29 +165,30 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			log.Info(fmt.Sprintf("Deleting instance with id %v from SM", serviceInstance.Status.InstanceID))
 			operationURL, err := smClient.Deprovision(serviceInstance.Status.InstanceID, nil)
 			if err != nil {
-				if smError, ok := err.(*smclient.ServiceManagerError); ok && smError.StatusCode == http.StatusNotFound {
-					log.Info(fmt.Sprintf("instance id %s not found in SM", serviceInstance.Status.InstanceID))
-					//if not found it means success
-					serviceInstance.Status.InstanceID = ""
-					setSuccessConditions(smTypes.DELETE, serviceInstance)
-					if err := r.Status().Update(ctx, serviceInstance); err != nil {
-						return ctrl.Result{}, err
-					}
+				smError, isSMError := err.(*smclient.ServiceManagerError)
+				if isSMError {
+					if smError.StatusCode == http.StatusNotFound {
+						log.Info(fmt.Sprintf("instance id %s not found in SM", serviceInstance.Status.InstanceID))
+						//if not found it means success
+						serviceInstance.Status.InstanceID = ""
+						setSuccessConditions(smTypes.DELETE, serviceInstance)
+						if err := r.Status().Update(ctx, serviceInstance); err != nil {
+							return ctrl.Result{}, err
+						}
 
-					// remove our finalizer from the list and update it.
-					if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
-						log.Error(err, "failed to remove finalizer")
-						return ctrl.Result{}, err
-					}
+						// remove our finalizer from the list and update it.
+						if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
+							log.Error(err, "failed to remove finalizer")
+							return ctrl.Result{}, err
+						}
 
-					return ctrl.Result{}, err
+						return ctrl.Result{}, err
+					} else if smError.StatusCode == http.StatusTooManyRequests {
+						//set in progress condition?
+						return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
+					}
 				}
 
-				// TODO + handle non transient errors
-				// 4** - standard backoff
-				// 5** - ?
-				// 429 - long wait
-				// ...
 				log.Error(err, "failed to delete instance")
 				// if fail to delete the instance in SM, return with error
 				// so that it can be retried
@@ -442,9 +441,6 @@ func (r *ServiceInstanceReconciler) removeFinalizer(ctx context.Context, service
 func (r *ServiceInstanceReconciler) addFinalizer(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance) error {
 	serviceInstance.ObjectMeta.Finalizers = append(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName)
 	if err := r.Update(ctx, serviceInstance); err != nil {
-		return err
-	}
-	if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
 		return err
 	}
 	return nil
