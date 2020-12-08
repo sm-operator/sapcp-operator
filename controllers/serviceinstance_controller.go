@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	types2 "k8s.io/apimachinery/pkg/types"
 	"net/http"
 
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
@@ -441,6 +442,9 @@ func (r *ServiceInstanceReconciler) removeFinalizer(ctx context.Context, service
 func (r *ServiceInstanceReconciler) addFinalizer(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance) error {
 	serviceInstance.ObjectMeta.Finalizers = append(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName)
 	if err := r.Update(ctx, serviceInstance); err != nil {
+		return err
+	}
+	if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
 		return err
 	}
 	return nil
