@@ -95,7 +95,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceBinding.Status.OperationURL)
 			if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-				log.Info("Operation % does not exist in SM, resyncing..")
+				log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceBinding.Status.OperationURL))
 				smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
 				if err != nil {
 					log.Error(err, fmt.Sprintf("unable to get binding with id %s from SM", serviceBinding.Status.BindingID))
@@ -584,6 +584,8 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.Serv
 	k8sBinding.Status.ObservedGeneration = k8sBinding.Generation
 	k8sBinding.Status.BindingID = smBinding.ID
 	k8sBinding.Status.InstanceID = serviceInstanceID
+	k8sBinding.Status.OperationURL = ""
+	k8sBinding.Status.OperationType = ""
 	switch smBinding.LastOperation.State {
 	case smTypes.PENDING:
 		fallthrough

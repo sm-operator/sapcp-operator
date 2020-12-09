@@ -86,7 +86,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceInstance.Status.OperationURL)
 			if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-				log.Info("Operation % does not exist in SM, resyncing..")
+				log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceInstance.Status.OperationURL))
 				smInstance, err := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, nil)
 				if err != nil {
 					log.Error(err, fmt.Sprintf("unable to get ServiceInstance with id %s from SM", serviceInstance.Status.InstanceID))
