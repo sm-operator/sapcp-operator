@@ -413,7 +413,7 @@ var _ = Describe("ServiceInstance controller", func() {
 						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}, nil)
 
 					})
-					FIt("should not fail", func() {
+					It("should not fail", func() {
 						Eventually(func() bool {
 							serviceInstance.Spec = updateSpec
 							updateInstance(serviceInstance)
