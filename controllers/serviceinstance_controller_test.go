@@ -306,7 +306,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					return false
 				}
 				return len(updatedInstance.Status.Conditions) > 0 && isConditionRefersUpdateOp(updatedInstance)
-			}, timeout*2, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())
 
 			return updatedInstance
 		}
