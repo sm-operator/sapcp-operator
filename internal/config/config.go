@@ -26,7 +26,7 @@ func Get() Config {
 		config = Config{ // default values
 			SyncPeriod:             60 * time.Second,
 			PollInterval:           10 * time.Second,
-			LongPollInterval:       60 * time.Second,
+			LongPollInterval:       5 * time.Minute,
 			EnableNamespaceSecrets: true,
 		}
 		envconfig.MustProcess("", &config)
