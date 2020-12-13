@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	"net/http"
+	"time"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
@@ -55,7 +56,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	ctx := context.Background()
 	log := r.Log.WithValues("serviceinstance", req.NamespacedName)
 
-	//time.Sleep(1)
+	time.Sleep(5 * time.Millisecond)
 	serviceInstance := &servicesv1alpha1.ServiceInstance{}
 	if err := r.Get(ctx, req.NamespacedName, serviceInstance); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -182,7 +183,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 						return ctrl.Result{}, err
 					} else if smError.StatusCode == http.StatusTooManyRequests {
-						//set in progress condition?
+						setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
 						return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
 					}
 				}
@@ -237,7 +238,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			if err := r.addFinalizer(ctx, serviceInstance); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{}, nil
 		}
 	}
 
@@ -249,6 +249,10 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
 	if serviceInstance.Status.InstanceID == "" {
 		log.Info("Instance ID is empty, checking if instance exist in SM")
+
+		if len(serviceInstance.Spec.ExternalName) == 0 {
+			serviceInstance.Spec.ExternalName = serviceInstance.Name
+		}
 
 		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {

@@ -225,7 +225,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 						// Stop reconciliation as the item is deleted
 						return ctrl.Result{}, nil
 					} else if smError.StatusCode == http.StatusTooManyRequests {
-						//set in progress condition?
+						setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceBinding)
 						return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
 					}
 				}
