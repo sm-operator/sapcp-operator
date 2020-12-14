@@ -192,7 +192,7 @@ var _ = Describe("ServiceInstance controller", func() {
 
 		Context("Async", func() {
 			BeforeEach(func() {
-				fakeClient.ProvisionReturns(fakeInstanceID, "/v1/service_instances/fakeid/operation/1234", nil)
+				fakeClient.ProvisionReturns(fakeInstanceID, "/v1/service_instances/fakeid/operations/1234", nil)
 				fakeClient.StatusReturns(&types2.Operation{
 					ID:    "1234",
 					Type:  string(smTypes.CREATE),
@@ -306,13 +306,12 @@ var _ = Describe("ServiceInstance controller", func() {
 					return false
 				}
 				return len(updatedInstance.Status.Conditions) > 0 && isConditionRefersUpdateOp(updatedInstance)
-			}, timeout*2, interval).Should(BeTrue())
+			}, timeout, interval).Should(BeTrue())
 
 			return updatedInstance
 		}
 
 		JustBeforeEach(func() {
-			serviceInstance.Spec = instanceSpec
 			serviceInstance = createInstance(ctx, instanceSpec)
 			Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
 		})
@@ -336,7 +335,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			Context("Async", func() {
 				When("spec is changed", func() {
 					BeforeEach(func() {
-						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operation/1234", nil)
+						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
 						fakeClient.StatusReturns(&types2.Operation{
 							ID:    "1234",
 							Type:  string(smTypes.UPDATE),
@@ -381,7 +380,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			Context("Async", func() {
 				When("spec is changed", func() {
 					BeforeEach(func() {
-						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operation/1234", nil)
+						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
 						fakeClient.StatusReturns(&types2.Operation{
 							ID:    "1234",
 							Type:  string(smTypes.UPDATE),
@@ -403,7 +402,26 @@ var _ = Describe("ServiceInstance controller", func() {
 								return false
 							}
 							return true
-						}, timeout*2, interval).Should(BeTrue())
+						}, timeout, interval).Should(BeTrue())
+					})
+				})
+
+				When("Instance has operation url to operation that no longer exist in SM", func() {
+					JustBeforeEach(func() {
+						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
+						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
+						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}, nil)
+					})
+					It("should not fail", func() {
+						Eventually(func() bool {
+							serviceInstance.Spec = updateSpec
+							updateInstance(serviceInstance)
+							err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
+							if err != nil || len(serviceInstance.Status.Conditions) != 1 || serviceInstance.Status.Conditions[0].Reason != Updated {
+								return false
+							}
+							return true
+						}, timeout, interval).Should(BeTrue())
 					})
 				})
 			})
@@ -445,7 +463,7 @@ var _ = Describe("ServiceInstance controller", func() {
 
 		When("delete in SM is async", func() {
 			JustBeforeEach(func() {
-				fakeClient.DeprovisionReturns("/v1/service_instances/id/operation/1234", nil)
+				fakeClient.DeprovisionReturns("/v1/service_instances/id/operations/1234", nil)
 				fakeClient.StatusReturns(&types2.Operation{
 					ID:    "1234",
 					Type:  string(smTypes.DELETE),

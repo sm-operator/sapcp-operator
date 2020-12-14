@@ -41,7 +41,6 @@ var _ webhook.Defaulter = &ServiceInstance{}
 func (r *ServiceInstance) Default() {
 	serviceinstancelog.Info("default", "name", r.Name)
 
-	// TODO(user): fill in your defaulting logic.
 	if len(r.Spec.ExternalName) == 0 {
 		r.Spec.ExternalName = r.Name
 	}

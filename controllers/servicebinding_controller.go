@@ -94,8 +94,20 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		status, err := smClient.Status(serviceBinding.Status.OperationURL, nil)
 		if err != nil {
 			log.Error(err, "failed to fetch operation", "operationURL", serviceBinding.Status.OperationURL)
-			// + TODO handle errors to fetch operation - should resync state from SM
-			return ctrl.Result{}, err
+			if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
+				log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceBinding.Status.OperationURL))
+				smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
+				if err != nil {
+					log.Error(err, fmt.Sprintf("unable to get binding with id %s from SM", serviceBinding.Status.BindingID))
+					return ctrl.Result{}, err
+				}
+				r.resyncBindingStatus(serviceBinding, smBinding, serviceBinding.Status.InstanceID)
+				if err := r.Status().Update(ctx, serviceBinding); err != nil {
+					log.Error(err, "unable to update ServiceBinding status")
+					return ctrl.Result{}, err
+				}
+			}
+			return ctrl.Result{}, nil
 		}
 
 		switch status.State {
@@ -188,35 +200,39 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
 			operationURL, err := smClient.Unbind(serviceBinding.Status.BindingID, nil)
 			if err != nil {
-				if smError, ok := err.(*smclient.ServiceManagerError); ok && smError.StatusCode == http.StatusNotFound {
-					log.Info(fmt.Sprintf("Binding id %s not found in SM", serviceBinding.Status.BindingID))
-					//if not found it means success
-					serviceBinding.Status.BindingID = ""
-					setSuccessConditions(smTypes.DELETE, serviceBinding)
-					if err := r.Status().Update(ctx, serviceBinding); err != nil {
-						return ctrl.Result{}, err
-					}
+				smError, ok := err.(*smclient.ServiceManagerError)
+				if ok {
+					if smError.StatusCode == http.StatusNotFound {
+						log.Info(fmt.Sprintf("Binding id %s not found in SM", serviceBinding.Status.BindingID))
+						//if not found it means success
+						serviceBinding.Status.BindingID = ""
+						setSuccessConditions(smTypes.DELETE, serviceBinding)
+						if err := r.Status().Update(ctx, serviceBinding); err != nil {
+							return ctrl.Result{}, err
+						}
 
-					// delete binding secret if exist
-					if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-						return ctrl.Result{}, err
-					}
+						// delete binding secret if exist
+						if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+							return ctrl.Result{}, err
+						}
 
-					// remove our finalizer from the list and update it.
-					if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-						log.Error(err, "failed to remove finalizer")
-						return ctrl.Result{}, err
-					}
+						// remove our finalizer from the list and update it.
+						if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+							log.Error(err, "failed to remove finalizer")
+							return ctrl.Result{}, err
+						}
 
-					// Stop reconciliation as the item is deleted
-					return ctrl.Result{}, nil
+						// Stop reconciliation as the item is deleted
+						return ctrl.Result{}, nil
+					} else if smError.StatusCode == http.StatusTooManyRequests {
+						setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceBinding)
+						if err := r.Update(ctx, serviceBinding); err != nil {
+							log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
+						}
+						return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
+					}
 				}
 
-				// TODO + handle non transient errors
-				// 4** - standard backoff
-				// 5** - ?
-				// 429 - long wait
-				// ...
 				log.Error(err, "failed to delete binding")
 				// if fail to delete the binding in SM, return with error
 				// so that it can be retried
@@ -370,7 +386,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 				}
 			}
 
-			r.resyncBindingStatus(serviceBinding, smBinding, serviceInstance)
+			r.resyncBindingStatus(serviceBinding, smBinding, serviceInstance.Status.InstanceID)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
 				log.Error(err, "unable to update ServiceBinding status")
 				return ctrl.Result{}, err
@@ -567,10 +583,12 @@ func (r *ServiceBindingReconciler) addFinalizer(ctx context.Context, binding *v1
 	return nil
 }
 
-func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.ServiceBinding, smBinding *smclientTypes.ServiceBinding, serviceInstance *v1alpha1.ServiceInstance) {
+func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.ServiceBinding, smBinding *smclientTypes.ServiceBinding, serviceInstanceID string) {
 	k8sBinding.Status.ObservedGeneration = k8sBinding.Generation
 	k8sBinding.Status.BindingID = smBinding.ID
-	k8sBinding.Status.InstanceID = serviceInstance.Status.InstanceID
+	k8sBinding.Status.InstanceID = serviceInstanceID
+	k8sBinding.Status.OperationURL = ""
+	k8sBinding.Status.OperationType = ""
 	switch smBinding.LastOperation.State {
 	case smTypes.PENDING:
 		fallthrough

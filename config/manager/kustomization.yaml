@@ -1,13 +1,9 @@
 resources:
 - manager.yaml
+- cluster-config.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
 - name: controller
   newName: localhost:5000/controller
   newTag: latest
-configMapGenerator:
-- name: sapcp-operator-config
-  literals:
-    - MANAGEMENT_NAMESPACE=sapcp-operator-system
-    - CLUSTER_ID=812345678

@@ -53,7 +53,7 @@ const (
 	timeout      = time.Second * 10
 	interval     = time.Millisecond * 250
 	syncPeriod   = time.Millisecond * 250
-	pollInterval = time.Millisecond * 100
+	pollInterval = time.Millisecond * 250
 )
 
 var cfg *rest.Config

@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
+	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/smclientfakes"
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	v1 "k8s.io/api/core/v1"
@@ -18,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"net/http"
 	"time"
 )
 
@@ -260,7 +262,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 				})
 
-				When("bind polling returns error", func() {
+				When("bind polling returns error different from 404", func() {
 					errorMessage := "no binding for you"
 
 					JustBeforeEach(func() {
@@ -274,6 +276,24 @@ var _ = Describe("ServiceBinding controller", func() {
 					It("should fail with the error returned from SM", func() {
 						createBindingWithError(context.Background(), bindingName, namespace, instanceName, "existing-name",
 							errorMessage)
+					})
+				})
+				When("bind polling returns 404", func() {
+					JustBeforeEach(func() {
+						fakeClient.GetBindingByIDReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
+						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
+						fakeClient.BindReturns(nil, "/v1/service_bindings/id/operations/1234", nil)
+					})
+					It("should not fail", func() {
+						createdBinding, err := createBindingWithoutAssertions(context.Background(), bindingName, namespace, instanceName, "")
+						Expect(err).ToNot(HaveOccurred())
+						Eventually(func() bool {
+							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+							if err != nil || len(createdBinding.Status.Conditions) != 1 || createdBinding.Status.Conditions[0].Reason != Created {
+								return false
+							}
+							return true
+						}, timeout, interval).Should(BeTrue())
 					})
 				})
 			})
@@ -455,7 +475,6 @@ var _ = Describe("ServiceBinding controller", func() {
 				// TODO labels
 			})
 		})
-
 	})
 
 	Context("Delete", func() {
