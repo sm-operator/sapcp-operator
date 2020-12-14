@@ -406,7 +406,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					})
 				})
 
-				FWhen("Instance has operation url to operation that no longer exist in SM", func() {
+				When("Instance has operation url to operation that no longer exist in SM", func() {
 					JustBeforeEach(func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
