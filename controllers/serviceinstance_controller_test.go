@@ -411,7 +411,6 @@ var _ = Describe("ServiceInstance controller", func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
 						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}, nil)
-
 					})
 					It("should not fail", func() {
 						Eventually(func() bool {

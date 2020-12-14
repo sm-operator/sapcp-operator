@@ -475,6 +475,7 @@ func getInstanceParameters(serviceInstance *servicesv1alpha1.ServiceInstance) (j
 }
 
 func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {
+	log.Info("updating service instance status")
 	if err := r.Status().Update(ctx, serviceInstance); err != nil {
 		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest instance and trying again", err.Error()))
 		latest := &servicesv1alpha1.ServiceInstance{}
