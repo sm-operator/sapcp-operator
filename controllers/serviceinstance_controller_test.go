@@ -377,7 +377,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					})
 				})
 			})
-			Context("Async", func() {
+			FContext("Async", func() {
 				When("spec is changed", func() {
 					BeforeEach(func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
@@ -402,7 +402,7 @@ var _ = Describe("ServiceInstance controller", func() {
 								return false
 							}
 							return true
-						}, timeout*2, interval).Should(BeTrue())
+						}, timeout, interval).Should(BeTrue())
 					})
 				})
 
@@ -422,7 +422,7 @@ var _ = Describe("ServiceInstance controller", func() {
 								return false
 							}
 							return true
-						}, timeout*2, interval).Should(BeTrue())
+						}, timeout, interval).Should(BeTrue())
 					})
 				})
 			})

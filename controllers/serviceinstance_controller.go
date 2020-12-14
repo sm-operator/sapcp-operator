@@ -20,19 +20,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/sm-operator/sapcp-operator/internal/secrets"
-	"net/http"
-	"time"
-
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
 	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"github.com/sm-operator/sapcp-operator/internal/config"
+	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"net/http"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -56,7 +54,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	ctx := context.Background()
 	log := r.Log.WithValues("serviceinstance", req.NamespacedName)
 
-	time.Sleep(5 * time.Millisecond)
 	serviceInstance := &servicesv1alpha1.ServiceInstance{}
 	if err := r.Get(ctx, req.NamespacedName, serviceInstance); err != nil {
 		if !apierrors.IsNotFound(err) {
