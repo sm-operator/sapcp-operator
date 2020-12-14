@@ -475,19 +475,18 @@ func getInstanceParameters(serviceInstance *servicesv1alpha1.ServiceInstance) (j
 func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {
 	log.Info("updating service instance status")
 	if err := r.Status().Update(ctx, serviceInstance); err != nil {
+		status := serviceInstance.Status
 		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest instance and trying again", err.Error()))
-		latest := &servicesv1alpha1.ServiceInstance{}
-		if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, latest); err != nil {
+		if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
 			log.Error(err, "failed to fetch latest instance")
 			return err
 		}
 
-		latest.Status = serviceInstance.Status
-		if err := r.Status().Update(ctx, latest); err != nil {
+		serviceInstance.Status = status
+		if err := r.Status().Update(ctx, serviceInstance); err != nil {
 			log.Error(err, "unable to update service instance status")
 			return err
 		}
-		serviceInstance = latest
 	}
 	log.Info("updated ServiceInstance status in k8s")
 	return nil
