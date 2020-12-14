@@ -226,7 +226,9 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 						return ctrl.Result{}, nil
 					} else if smError.StatusCode == http.StatusTooManyRequests {
 						setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceBinding)
-						r.Update(ctx, serviceBinding)
+						if err := r.Update(ctx, serviceBinding); err != nil {
+							log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
+						}
 						return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
 					}
 				}
