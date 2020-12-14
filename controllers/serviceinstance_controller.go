@@ -138,7 +138,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			if len(serviceInstance.Status.InstanceID) == 0 {
 				log.Info("instance does not exists in SM, removing finalizer")
 				if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
-					log.Error(err, "failed to remove finalizer")
 					return ctrl.Result{}, err
 				}
 				return ctrl.Result{}, nil
@@ -170,7 +169,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 						// remove our finalizer from the list and update it.
 						if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
-							log.Error(err, "failed to remove finalizer")
 							return ctrl.Result{}, err
 						}
 
@@ -215,7 +213,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 			// remove our finalizer from the list and update it.
 			if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
-				log.Error(err, "failed to remove finalizer")
 				return ctrl.Result{}, err
 			}
 
@@ -338,8 +335,6 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			return ctrl.Result{}, err
 		}
 
-		log.Info("updated ServiceInstance status in k8s")
-
 		return ctrl.Result{}, nil
 	}
 
@@ -426,6 +421,7 @@ func (r *ServiceInstanceReconciler) removeFinalizer(ctx context.Context, service
 	}
 	serviceInstance.ObjectMeta.Finalizers = removeString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName)
 	if err := r.Update(ctx, serviceInstance); err != nil {
+		log.Error(err, "failed to remove finalizer")
 		return err
 	}
 	return nil
@@ -491,5 +487,6 @@ func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceIns
 		}
 		serviceInstance = latest
 	}
+	log.Info("updated ServiceInstance status in k8s")
 	return nil
 }
