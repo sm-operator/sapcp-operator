@@ -395,7 +395,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1alpha1.ServiceInstance, smInstance types.ServiceInstance) {
 	//set observed generation to 0 because we dont know which generation the current state in SM represents
-	k8sInstance.Status.ObservedGeneration = 0
+	k8sInstance.Status.ObservedGeneration = k8sInstance.Generation
 	k8sInstance.Status.InstanceID = smInstance.ID
 	k8sInstance.Status.OperationURL = ""
 	k8sInstance.Status.OperationType = ""
