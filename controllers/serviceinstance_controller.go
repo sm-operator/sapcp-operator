@@ -72,16 +72,15 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	}
 
 	if isDelete(serviceInstance.ObjectMeta) {
-		return r.delete(serviceInstance, log, ctx)
-	} else {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
-			log.Info("instance has no finalizer, adding it...")
-			if err := r.addFinalizer(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
+		return r.delete(ctx, serviceInstance, log)
+	}
+	// The object is not being deleted, so if it does not have our finalizer,
+	// then lets add the finalizer and update the object. This is equivalent
+	// registering our finalizer.
+	if !containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
+		log.Info("instance has no finalizer, adding it...")
+		if err := r.addFinalizer(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -151,23 +150,22 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating...", serviceInstance.Status.InstanceID))
 			return r.createInstance(ctx, serviceInstance, log, smClient)
-		} else {
-			log.Error(err, "failed to fetch service instance from SM")
-			//TODO what should be the message?
-			setFailureConditions(smTypes.UPDATE, "", serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
+		}
+		log.Error(err, "failed to fetch service instance from SM")
+		//TODO what should be the message?
+		setFailureConditions(smTypes.UPDATE, "", serviceInstance)
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, err
 	}
 
 	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
 	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
-	return r.updateInstance(err, serviceInstance, log, smServiceInstance, smClient, ctx)
+	return r.updateInstance(ctx, serviceInstance, log, smServiceInstance, smClient)
 }
 
-func (r *ServiceInstanceReconciler) delete(serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, ctx context.Context) (ctrl.Result, error) {
+func (r *ServiceInstanceReconciler) delete(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
 	if containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
 		if len(serviceInstance.Status.InstanceID) == 0 {
 			log.Info("instance does not exists in SM, removing finalizer")
@@ -342,7 +340,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceInstanceReconciler) updateInstance(err error, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smServiceInstance *types.ServiceInstance, smClient smclient.Client, ctx context.Context) (ctrl.Result, error) {
+func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smServiceInstance *types.ServiceInstance, smClient smclient.Client) (ctrl.Result, error) {
 	log.Info("updating instance in SM")
 	instanceParameters, err := getInstanceParameters(serviceInstance)
 	if err != nil {
