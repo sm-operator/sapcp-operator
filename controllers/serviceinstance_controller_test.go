@@ -165,7 +165,6 @@ var _ = Describe("ServiceInstance controller", func() {
 					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 					Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
 					Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
-					Expect(fakeClient.ProvisionCallCount()).To(Equal(1))
 				})
 			})
 
