@@ -46,7 +46,7 @@ type Client interface {
 
 	ListInstances(*Parameters) (*types.ServiceInstances, error)
 	GetInstanceByID(string, *Parameters) (*types.ServiceInstance, error)
-	UpdateInstance(string, *types.ServiceInstance, *Parameters) (*types.ServiceInstance, string, error)
+	UpdateInstance(string, *types.ServiceInstanceUpdate, *Parameters) (*types.ServiceInstance, string, error)
 	Provision(*types.ServiceInstance, string, string, *Parameters) (string, string, error)
 	Deprovision(string, *Parameters) (string, error)
 
@@ -250,7 +250,7 @@ func (client *serviceManagerClient) Unbind(id string, q *Parameters) (string, er
 	return client.delete(web.ServiceBindingsURL+"/"+id, q)
 }
 
-func (client *serviceManagerClient) UpdateInstance(id string, updatedInstance *types.ServiceInstance, q *Parameters) (*types.ServiceInstance, string, error) {
+func (client *serviceManagerClient) UpdateInstance(id string, updatedInstance *types.ServiceInstanceUpdate, q *Parameters) (*types.ServiceInstance, string, error) {
 	var result *types.ServiceInstance
 	location, err := client.update(updatedInstance, web.ServiceInstancesURL, id, q, &result)
 	if err != nil {

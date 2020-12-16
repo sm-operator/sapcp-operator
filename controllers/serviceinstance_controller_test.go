@@ -93,6 +93,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		fakeClient = &smclientfakes.FakeClient{}
 		fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
 		fakeClient.DeprovisionReturns("", nil)
+		fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}}, nil)
 	})
 
 	AfterEach(func() {
@@ -251,9 +252,11 @@ var _ = Describe("ServiceInstance controller", func() {
 					fakeClient.ListInstancesReturns(&types2.ServiceInstances{
 						ServiceInstances: []types2.ServiceInstance{
 							{
-								ID:            fakeInstanceID,
-								Name:          fakeInstanceName,
-								LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
+								ServiceInstanceBase: types2.ServiceInstanceBase{
+									ID:            fakeInstanceID,
+									Name:          fakeInstanceName,
+									LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
+								},
 							},
 						},
 					}, nil)
@@ -297,7 +300,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		}
 
 		updateInstance := func(serviceInstance *v1alpha1.ServiceInstance) *v1alpha1.ServiceInstance {
-			Expect(k8sClient.Update(ctx, serviceInstance)).Should(Succeed())
+			_ = k8sClient.Update(ctx, serviceInstance)
 			updatedInstance := &v1alpha1.ServiceInstance{}
 
 			Eventually(func() bool {
@@ -410,7 +413,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					JustBeforeEach(func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
-						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}, nil)
+						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}, nil)
 					})
 					It("should not fail", func() {
 						Eventually(func() bool {

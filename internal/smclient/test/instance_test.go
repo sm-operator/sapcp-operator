@@ -12,22 +12,27 @@ import (
 )
 
 var (
-	instance    *types.ServiceInstance
-	serviceID   = "service_id"
-	serviceName = "mongo"
-	planName    = "small"
-	planID      = "service_plan_id"
+	instanceBase types.ServiceInstanceBase
+	instance     *types.ServiceInstance
+	serviceID    = "service_id"
+	serviceName  = "mongo"
+	planName     = "small"
+	planID       = "service_plan_id"
 )
 
 var _ = Describe("Instance test", func() {
 
 	BeforeEach(func() {
-		instance = &types.ServiceInstance{
+		instanceBase = types.ServiceInstanceBase{
 			ID:            "instanceID",
 			Name:          "instance1",
 			ServicePlanID: planID,
 			PlatformID:    "platform_id",
 			Context:       json.RawMessage("{}"),
+		}
+
+		instance = &types.ServiceInstance{
+			ServiceInstanceBase: instanceBase,
 		}
 		instancesArray := []types.ServiceInstance{*instance}
 		instances := types.ServiceInstances{ServiceInstances: instancesArray}
@@ -423,6 +428,10 @@ var _ = Describe("Instance test", func() {
 	})
 
 	Describe("Update", func() {
+		var instanceToUpdate *types.ServiceInstanceUpdate
+		BeforeEach(func() {
+			instanceToUpdate = &types.ServiceInstanceUpdate{ServiceInstanceBase: instanceBase}
+		})
 		Context("When valid instance is being updated synchronously", func() {
 			BeforeEach(func() {
 				responseBody, _ := json.Marshal(instance)
@@ -431,7 +440,7 @@ var _ = Describe("Instance test", func() {
 				}
 			})
 			It("should update successfully", func() {
-				responseInstance, location, err := client.UpdateInstance(instance.ID, instance, params)
+				responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, params)
 
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(location).Should(HaveLen(0))
@@ -448,7 +457,7 @@ var _ = Describe("Instance test", func() {
 				}
 			})
 			It("should receive operation location", func() {
-				responseInstance, location, err := client.UpdateInstance(instance.ID, instance, params)
+				responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, params)
 
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(location).Should(Equal(locationHeader))
@@ -468,7 +477,7 @@ var _ = Describe("Instance test", func() {
 				}
 			})
 			It("should return error", func() {
-				responseInstance, location, err := client.UpdateInstance(instance.ID, instance, params)
+				responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, params)
 
 				Expect(err).Should(HaveOccurred())
 				Expect(location).Should(BeEmpty())
@@ -485,7 +494,7 @@ var _ = Describe("Instance test", func() {
 					}
 				})
 				It("should return error with status code", func() {
-					responseInstance, location, err := client.UpdateInstance(instance.ID, instance, params)
+					responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, params)
 
 					Expect(err).Should(HaveOccurred())
 					Expect(location).Should(BeEmpty())
@@ -502,7 +511,7 @@ var _ = Describe("Instance test", func() {
 					}
 				})
 				It("should return error with url and description", func() {
-					responseInstance, location, err := client.UpdateInstance(instance.ID, instance, params)
+					responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, params)
 
 					Expect(err).Should(HaveOccurred())
 					Expect(location).Should(BeEmpty())
@@ -519,7 +528,7 @@ var _ = Describe("Instance test", func() {
 					}
 				})
 				It("should return error without url and description if invalid response body", func() {
-					responseInstance, location, err := client.UpdateInstance(instance.ID, instance, params)
+					responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, params)
 
 					Expect(err).Should(HaveOccurred())
 					Expect(location).Should(BeEmpty())
@@ -534,7 +543,7 @@ var _ = Describe("Instance test", func() {
 		Context("When invalid config is set", func() {
 			It("should return error", func() {
 				client, _ = smclient.NewClient(context.TODO(), &smclient.ClientConfig{URL: "invalidURL"}, fakeAuthClient)
-				_, location, err := client.UpdateInstance(instance.ID, instance, params)
+				_, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, params)
 
 				Expect(err).Should(HaveOccurred())
 				Expect(location).Should(BeEmpty())

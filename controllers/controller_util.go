@@ -148,7 +148,12 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 		message = fmt.Sprintf("%s deletion failed: %s", object.GetControllerName(), errorMessage)
 	}
 
-	reason := getConditionReason(operationType, smTypes.FAILED)
+	var reason string
+	if operationType != Unknown {
+		reason = getConditionReason(operationType, smTypes.FAILED)
+	} else {
+		reason = object.GetConditions()[0].Reason
+	}
 
 	readyCondition := servicesv1alpha1.Condition{
 		Type:               servicesv1alpha1.ConditionReady,
