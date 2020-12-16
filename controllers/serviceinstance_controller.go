@@ -278,14 +278,13 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 					log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating", serviceInstance.Status.InstanceID))
 					return r.createInstance(ctx, serviceInstance, log, smClient)
-				} else {
-					log.Error(err, fmt.Sprintf("unable to get ServiceInstance with id %s from SM", serviceInstance.Status.InstanceID))
-					setFailureConditions(Unknown, getInstanceErr.Error(), serviceInstance)
-					if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-						return ctrl.Result{}, err
-					}
-					return ctrl.Result{}, getInstanceErr
 				}
+				log.Error(err, fmt.Sprintf("unable to get ServiceInstance with id %s from SM", serviceInstance.Status.InstanceID))
+				setFailureConditions(Unknown, getInstanceErr.Error(), serviceInstance)
+				if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, getInstanceErr
 			}
 
 			r.resyncInstanceStatus(serviceInstance, *smInstance)
@@ -293,13 +292,13 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
-		} else {
-			setFailureConditions(Unknown, err.Error(), serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
+		}
+		setFailureConditions(Unknown, err.Error(), serviceInstance)
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, err
+
 	}
 
 	switch status.State {
