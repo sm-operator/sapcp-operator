@@ -96,9 +96,9 @@ func setInProgressCondition(operationType smTypes.OperationCategory, message str
 	if operationType == smTypes.CREATE {
 		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
 	} else if operationType == smTypes.UPDATE {
-		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
-	} else if operationType == smTypes.DELETE {
 		defaultMessage = fmt.Sprintf("%s is being updated", object.GetControllerName())
+	} else if operationType == smTypes.DELETE {
+		defaultMessage = fmt.Sprintf("%s is being deleted", object.GetControllerName())
 	}
 
 	if len(message) == 0 {
