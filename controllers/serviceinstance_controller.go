@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"net/http"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
