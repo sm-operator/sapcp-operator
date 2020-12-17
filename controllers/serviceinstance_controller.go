@@ -566,22 +566,26 @@ func getInstanceLabelsForUpdate(k8sServiceInstance *servicesv1alpha1.ServiceInst
 					labelValuesAdd = append(labelValuesAdd, k8sValue)
 				}
 			}
-			labelChanges = append(labelChanges, &smTypes.LabelChange{
-				Operation: smTypes.AddLabelValuesOperation,
-				Key:       key,
-				Values:    labelValuesAdd,
-			})
+			if len(labelValuesAdd) > 0 {
+				labelChanges = append(labelChanges, &smTypes.LabelChange{
+					Operation: smTypes.AddLabelValuesOperation,
+					Key:       key,
+					Values:    labelValuesAdd,
+				})
+			}
 
 			for _, smValue := range smValues {
 				if !contains(k8sServiceInstance.Spec.Labels[key], smValue) {
 					labelValuesRemove = append(labelValuesRemove, smValue)
 				}
 			}
-			labelChanges = append(labelChanges, &smTypes.LabelChange{
-				Operation: smTypes.RemoveLabelValuesOperation,
-				Key:       key,
-				Values:    labelValuesRemove,
-			})
+			if len(labelValuesRemove) > 0 {
+				labelChanges = append(labelChanges, &smTypes.LabelChange{
+					Operation: smTypes.RemoveLabelValuesOperation,
+					Key:       key,
+					Values:    labelValuesRemove,
+				})
+			}
 		}
 	}
 
