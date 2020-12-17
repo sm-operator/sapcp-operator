@@ -77,7 +77,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	}
 
 	if isDelete(serviceInstance.ObjectMeta) {
-		return r.delete(ctx, serviceInstance, log)
+		return r.deleteInstance(ctx, serviceInstance, log)
 	}
 	// The object is not being deleted, so if it does not have our finalizer,
 	// then lets add the finalizer and update the object. This is equivalent
@@ -136,9 +136,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			return ctrl.Result{}, nil
 		}
 
-		//Create
-		log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
-		serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+		//if instance was not recovered then create new instance
 		return r.createInstance(ctx, serviceInstance, log, smClient)
 	}
 
@@ -168,12 +166,197 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		return ctrl.Result{}, err
 	}
 
-	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
-	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	return r.updateInstance(ctx, serviceInstance, log, smServiceInstance, smClient)
 }
 
-func (r *ServiceInstanceReconciler) delete(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
+func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
+	log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceInstance.Status.OperationURL))
+	smClient, err := r.getSMClient(ctx, log, serviceInstance)
+	if err != nil {
+		setFailureConditions(serviceInstance.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
+	status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
+	if err != nil {
+		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", err.Error()), "operationURL", serviceInstance.Status.OperationURL)
+		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
+			log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceInstance.Status.OperationURL))
+			smInstance, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
+			if getInstanceErr != nil {
+				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
+					log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating", serviceInstance.Status.InstanceID))
+					return r.createInstance(ctx, serviceInstance, log, smClient)
+				}
+				log.Error(err, fmt.Sprintf("unable to get ServiceInstance with id %s from SM", serviceInstance.Status.InstanceID))
+				setFailureConditions(Unknown, getInstanceErr.Error(), serviceInstance)
+				if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, getInstanceErr
+			}
+
+			r.resyncInstanceStatus(serviceInstance, *smInstance)
+			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+		setFailureConditions(Unknown, err.Error(), serviceInstance)
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+
+	}
+
+	switch status.State {
+	case string(smTypes.IN_PROGRESS):
+		fallthrough
+	case string(smTypes.PENDING):
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+	case string(smTypes.FAILED):
+		setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceInstance)
+		if serviceInstance.Status.OperationType == smTypes.DELETE {
+			serviceInstance.Status.OperationURL = ""
+			serviceInstance.Status.OperationType = ""
+			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+				return ctrl.Result{}, err
+			}
+			errMsg := "Async deprovision operation failed"
+			if status.Errors != nil {
+				errMsg = fmt.Sprintf("Async deprovision operation failed, errors: %s", string(status.Errors))
+			}
+			return ctrl.Result{}, fmt.Errorf(errMsg)
+		}
+	case string(smTypes.SUCCEEDED):
+		setSuccessConditions(smTypes.OperationCategory(status.Type), serviceInstance)
+		if serviceInstance.Status.OperationType == smTypes.DELETE {
+			// delete was successful - remove our finalizer from the list and update it.
+			if err = r.removeFinalizer(ctx, serviceInstance, log); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	serviceInstance.Status.OperationURL = ""
+	serviceInstance.Status.OperationType = ""
+
+	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
+	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
+	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+	log.Info("Creating instance in SM")
+	instanceParameters, err := getInstanceParameters(serviceInstance)
+	if err != nil {
+		log.Error(err, "failed to parse instance parameters")
+		return ctrl.Result{}, err
+	}
+
+	smInstanceID, operationURL, err := smClient.Provision(&types.ServiceInstance{
+		ServiceInstanceBase: types.ServiceInstanceBase{
+			Name:          serviceInstance.Spec.ExternalName,
+			ServicePlanID: serviceInstance.Spec.ServicePlanID,
+			Parameters:    instanceParameters,
+		},
+		Labels: getInstanceLabels(serviceInstance, r.Config.ClusterID),
+	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
+
+	if err != nil {
+		log.Error(err, "failed to create service instance", "servicePlanID", serviceInstance.Spec.ServicePlanID)
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	if operationURL != "" {
+		log.Info("Provision request is in progress")
+		serviceInstance.Status.OperationURL = operationURL
+		serviceInstance.Status.OperationType = smTypes.CREATE
+		setInProgressCondition(smTypes.CREATE, "", serviceInstance)
+		serviceInstance.Status.InstanceID = smInstanceID
+		if serviceInstance.Status.InstanceID == "" {
+			return ctrl.Result{}, fmt.Errorf("failed to extract instance ID from operation URL %s", operationURL)
+		}
+
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+	}
+	log.Info("Instance provisioned successfully")
+	setSuccessConditions(smTypes.CREATE, serviceInstance)
+	serviceInstance.Status.InstanceID = smInstanceID
+	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smServiceInstance *types.ServiceInstance, smClient smclient.Client) (ctrl.Result, error) {
+	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
+	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+	log.Info("updating instance in SM")
+	instanceParameters, err := getInstanceParameters(serviceInstance)
+	if err != nil {
+		log.Error(err, "failed to parse instance parameters")
+		return ctrl.Result{}, err
+	}
+	instanceLabels := getInstanceLabelsForUpdate(serviceInstance, smServiceInstance)
+
+	_, operationURL, err := smClient.UpdateInstance(serviceInstance.Status.InstanceID, &types.ServiceInstanceUpdate{
+		ServiceInstanceBase: types.ServiceInstanceBase{
+			Name:          serviceInstance.Spec.ExternalName,
+			ServicePlanID: serviceInstance.Spec.ServicePlanID,
+			Parameters:    instanceParameters,
+		},
+		Labels: instanceLabels,
+	}, nil)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
+		setFailureConditions(smTypes.UPDATE, err.Error(), serviceInstance)
+
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	if operationURL != "" {
+		log.Info(fmt.Sprintf("Update request accepted, operation URL: %s", operationURL))
+		serviceInstance.Status.OperationURL = operationURL
+		serviceInstance.Status.OperationType = smTypes.UPDATE
+		setInProgressCondition(smTypes.UPDATE, "", serviceInstance)
+
+		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+	}
+	log.Info("Instance updated successfully")
+	setSuccessConditions(smTypes.UPDATE, serviceInstance)
+	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
 	if containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
 		if len(serviceInstance.Status.InstanceID) == 0 {
 			log.Info("instance does not exists in SM, removing finalizer")
@@ -265,189 +448,6 @@ func (r *ServiceInstanceReconciler) delete(ctx context.Context, serviceInstance 
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
-	log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceInstance.Status.OperationURL))
-	smClient, err := r.getSMClient(ctx, log, serviceInstance)
-	if err != nil {
-		setFailureConditions(serviceInstance.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-	}
-
-	status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
-	if err != nil {
-		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", err.Error()), "operationURL", serviceInstance.Status.OperationURL)
-		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-			log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceInstance.Status.OperationURL))
-			smInstance, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
-			if getInstanceErr != nil {
-				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-					log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating", serviceInstance.Status.InstanceID))
-					return r.createInstance(ctx, serviceInstance, log, smClient)
-				}
-				log.Error(err, fmt.Sprintf("unable to get ServiceInstance with id %s from SM", serviceInstance.Status.InstanceID))
-				setFailureConditions(Unknown, getInstanceErr.Error(), serviceInstance)
-				if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, getInstanceErr
-			}
-
-			r.resyncInstanceStatus(serviceInstance, *smInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-		setFailureConditions(Unknown, err.Error(), serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-
-	}
-
-	switch status.State {
-	case string(smTypes.IN_PROGRESS):
-		fallthrough
-	case string(smTypes.PENDING):
-		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-	case string(smTypes.FAILED):
-		setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceInstance)
-		if serviceInstance.Status.OperationType == smTypes.DELETE {
-			serviceInstance.Status.OperationURL = ""
-			serviceInstance.Status.OperationType = ""
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
-			errMsg := "Async deprovision operation failed"
-			if status.Errors != nil {
-				errMsg = fmt.Sprintf("Async deprovision operation failed, errors: %s", string(status.Errors))
-			}
-			return ctrl.Result{}, fmt.Errorf(errMsg)
-		}
-	case string(smTypes.SUCCEEDED):
-		setSuccessConditions(smTypes.OperationCategory(status.Type), serviceInstance)
-		if serviceInstance.Status.OperationType == smTypes.DELETE {
-			// delete was successful - remove our finalizer from the list and update it.
-			if err = r.removeFinalizer(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-	}
-
-	serviceInstance.Status.OperationURL = ""
-	serviceInstance.Status.OperationType = ""
-
-	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smServiceInstance *types.ServiceInstance, smClient smclient.Client) (ctrl.Result, error) {
-	log.Info("updating instance in SM")
-	instanceParameters, err := getInstanceParameters(serviceInstance)
-	if err != nil {
-		log.Error(err, "failed to parse instance parameters")
-		return ctrl.Result{}, err
-	}
-	instanceLabels := getInstanceLabelsForUpdate(serviceInstance, smServiceInstance)
-
-	_, operationURL, err := smClient.UpdateInstance(serviceInstance.Status.InstanceID, &types.ServiceInstanceUpdate{
-		ServiceInstanceBase: types.ServiceInstanceBase{
-			Name:          serviceInstance.Spec.ExternalName,
-			ServicePlanID: serviceInstance.Spec.ServicePlanID,
-			Parameters:    instanceParameters,
-		},
-		Labels: instanceLabels,
-	}, nil)
-	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
-		setFailureConditions(smTypes.UPDATE, err.Error(), serviceInstance)
-
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, err
-	}
-
-	if operationURL != "" {
-		log.Info(fmt.Sprintf("Update request accepted, operation URL: %s", operationURL))
-		serviceInstance.Status.OperationURL = operationURL
-		serviceInstance.Status.OperationType = smTypes.UPDATE
-		setInProgressCondition(smTypes.UPDATE, "", serviceInstance)
-
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-	}
-	log.Info("Instance updated successfully")
-	setSuccessConditions(smTypes.UPDATE, serviceInstance)
-	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
-	log.Info("Creating instance in SM")
-	instanceParameters, err := getInstanceParameters(serviceInstance)
-	if err != nil {
-		log.Error(err, "failed to parse instance parameters")
-		return ctrl.Result{}, err
-	}
-
-	smInstanceID, operationURL, err := smClient.Provision(&types.ServiceInstance{
-		ServiceInstanceBase: types.ServiceInstanceBase{
-			Name:          serviceInstance.Spec.ExternalName,
-			ServicePlanID: serviceInstance.Spec.ServicePlanID,
-			Parameters:    instanceParameters,
-		},
-		Labels: getInstanceLabels(serviceInstance, r.Config.ClusterID),
-	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
-
-	if err != nil {
-		log.Error(err, "failed to create service instance", "servicePlanID", serviceInstance.Spec.ServicePlanID)
-		setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, err
-	}
-
-	if operationURL != "" {
-		log.Info("Provision request is in progress")
-		serviceInstance.Status.OperationURL = operationURL
-		serviceInstance.Status.OperationType = smTypes.CREATE
-		setInProgressCondition(smTypes.CREATE, "", serviceInstance)
-		serviceInstance.Status.InstanceID = smInstanceID
-		if serviceInstance.Status.InstanceID == "" {
-			return ctrl.Result{}, fmt.Errorf("failed to extract instance ID from operation URL %s", operationURL)
-		}
-
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-	}
-	log.Info("Instance provisioned successfully")
-	setSuccessConditions(smTypes.CREATE, serviceInstance)
-	serviceInstance.Status.InstanceID = smInstanceID
-	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
-}
-
 func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1alpha1.ServiceInstance, smInstance types.ServiceInstance) {
 	//set observed generation to 0 because we dont know which generation the current state in SM represents
 	k8sInstance.Status.ObservedGeneration = 0
@@ -511,6 +511,26 @@ func (r *ServiceInstanceReconciler) getSMClient(ctx context.Context, log logr.Lo
 	}
 
 	return getSMClient(ctx, secret, log)
+}
+
+func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {
+	log.Info("updating service instance status")
+	if err := r.Status().Update(ctx, serviceInstance); err != nil {
+		status := serviceInstance.Status
+		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest instance and trying again", err.Error()))
+		if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
+			log.Error(err, "failed to fetch latest instance")
+			return err
+		}
+
+		serviceInstance.Status = status
+		if err := r.Status().Update(ctx, serviceInstance); err != nil {
+			log.Error(err, "unable to update service instance status")
+			return err
+		}
+	}
+	log.Info("updated ServiceInstance status in k8s")
+	return nil
 }
 
 func getInstanceParameters(serviceInstance *servicesv1alpha1.ServiceInstance) (json.RawMessage, error) {
@@ -600,24 +620,4 @@ func getInstanceLabelsForUpdate(k8sServiceInstance *servicesv1alpha1.ServiceInst
 		}
 	}
 	return labelChanges
-}
-
-func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {
-	log.Info("updating service instance status")
-	if err := r.Status().Update(ctx, serviceInstance); err != nil {
-		status := serviceInstance.Status
-		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest instance and trying again", err.Error()))
-		if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
-			log.Error(err, "failed to fetch latest instance")
-			return err
-		}
-
-		serviceInstance.Status = status
-		if err := r.Status().Update(ctx, serviceInstance); err != nil {
-			log.Error(err, "unable to update service instance status")
-			return err
-		}
-	}
-	log.Info("updated ServiceInstance status in k8s")
-	return nil
 }
