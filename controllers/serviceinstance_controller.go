@@ -38,6 +38,10 @@ import (
 )
 
 const instanceFinalizerName string = "storage.finalizers.peripli.io.service-manager.serviceInstance"
+const subaccountIDLabel string = "subaccount_id"
+const namespaceLabel string = "_namespace"
+const k8sNameLabel string = "_k8sname"
+const clusterIDLabel string = "_clusterid"
 
 // ServiceInstanceReconciler reconciles a ServiceInstance object
 type ServiceInstanceReconciler struct {
@@ -98,6 +102,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			serviceInstance.Spec.ExternalName = serviceInstance.Name
 		}
 
+		//Recovery
 		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
@@ -111,9 +116,9 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 				fmt.Sprintf("name eq '%s'", serviceInstance.Spec.ExternalName),
 				fmt.Sprintf("service_plan_id eq '%s'", serviceInstance.Spec.ServicePlanID)},
 			LabelQuery: []string{
-				fmt.Sprintf("_clusterid eq '%s'", r.Config.ClusterID),
-				fmt.Sprintf("_namespace eq '%s'", serviceInstance.Namespace),
-				fmt.Sprintf("_k8sname eq '%s'", serviceInstance.Name)},
+				fmt.Sprintf("%s eq '%s'", clusterIDLabel, r.Config.ClusterID),
+				fmt.Sprintf("%s eq '%s'", namespaceLabel, serviceInstance.Namespace),
+				fmt.Sprintf("%s eq '%s'", k8sNameLabel, serviceInstance.Name)},
 			GeneralParams: []string{"attach_last_operations=true"},
 		}
 
@@ -131,11 +136,13 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			return ctrl.Result{}, nil
 		}
 
+		//Create
 		log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
 		serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 		return r.createInstance(ctx, serviceInstance, log, smClient)
 	}
 
+	//Update
 	log.Info(fmt.Sprintf("Updating instance with ID %s", serviceInstance.Status.InstanceID))
 	smClient, err := r.getSMClient(ctx, log, serviceInstance)
 	if err != nil {
@@ -147,7 +154,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	}
 
 	var smServiceInstance *types.ServiceInstance
-	if smServiceInstance, err = smClient.GetInstanceByID(serviceInstance.Status.InstanceID, nil); err != nil {
+	if smServiceInstance, err = smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{}); err != nil {
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating...", serviceInstance.Status.InstanceID))
 			return r.createInstance(ctx, serviceInstance, log, smClient)
@@ -274,7 +281,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", err.Error()), "operationURL", serviceInstance.Status.OperationURL)
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceInstance.Status.OperationURL))
-			smInstance, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, nil)
+			smInstance, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
 			if getInstanceErr != nil {
 				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 					log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating", serviceInstance.Status.InstanceID))
@@ -519,15 +526,13 @@ func getInstanceParameters(serviceInstance *servicesv1alpha1.ServiceInstance) (j
 }
 
 func getInstanceLabels(serviceInstance *servicesv1alpha1.ServiceInstance, clusterID string) smTypes.Labels {
-	var instanceLabels smTypes.Labels
-	labels := make(map[string][]string, 3)
-	labels["_namespace"] = []string{serviceInstance.Namespace}
-	labels["_k8sname"] = []string{serviceInstance.Name}
-	labels["_clusterid"] = []string{clusterID}
+	instanceLabels := make(map[string][]string, 3)
+	instanceLabels[namespaceLabel] = []string{serviceInstance.Namespace}
+	instanceLabels[k8sNameLabel] = []string{serviceInstance.Name}
+	instanceLabels[clusterIDLabel] = []string{clusterID}
 	for key, value := range serviceInstance.Spec.Labels {
-		labels[key] = value
+		instanceLabels[key] = value
 	}
-
 	return instanceLabels
 }
 
@@ -545,7 +550,7 @@ func getInstanceLabelsForUpdate(k8sServiceInstance *servicesv1alpha1.ServiceInst
 	labelValuesAdd := make([]string, 0)
 	labelValuesRemove := make([]string, 0)
 	for key, smValues := range smServiceInstance.Labels {
-		if key == "_namespace" || key == "_k8sname" || key == "_clusterid" {
+		if key == subaccountIDLabel || key == namespaceLabel || key == k8sNameLabel || key == clusterIDLabel || key == "container_id" { //TODO remove container ID once SM is ready with the new plan
 			continue
 		}
 		if k8sServiceInstance.Spec.Labels[key] == nil {
