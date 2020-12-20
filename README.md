@@ -6,19 +6,20 @@
 
 
 
-#Local setup
-## First time
+##Local setup
+### First time
 ./hack/install-kubebuilder.sh
 ./hack/kind-with-registry.sh
 
-## run test
+### run tests
 make test
 
-## run locally
+### run locally
 make docker-build
 docker tag controller:latest localhost:5000/controller:latest
 docker push localhost:5000/controller:latest
 make deploy IMG=localhost:5000/controller:latest
-kubectl create secret generic sapcp-operator-secret --from-literal=clientid="<clientid>" --from-literal=clientsecret="<secret>" --from-literal=url="https://service-manager.cfapps.sap.hana.ondemand.com" --from-literal=subdomain="<subdomain>" --namespace=sapcp-operator-system
 
-
+kubectl create secret generic sapcp-operator-secret --from-literal=clientid="< clientid >" --from-literal=clientsecret="< secret >" --from-literal=url="< sm_url >" --from-literal=subdomain="< subdomain >" --namespace=sapcp-operator-system </br>
+e.g.
+kubectl create secret generic sapcp-operator-secret --from-literal=clientid="myclient" --from-literal=clientsecret="mysecret" --from-literal=url="https://service-manager.cfapps.sap.hana.ondemand.com" --from-literal=subdomain="MyDemoSubaccount0909" --namespace=sapcp-operator-system
