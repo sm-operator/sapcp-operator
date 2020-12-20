@@ -8,17 +8,17 @@
 
 ##Local setup
 ### First time
-./hack/install-kubebuilder.sh
+./hack/install-kubebuilder.sh </br>
 ./hack/kind-with-registry.sh
 
 ### run tests
 make test
 
 ### run locally
-make docker-build
-docker tag controller:latest localhost:5000/controller:latest
-docker push localhost:5000/controller:latest
-make deploy IMG=localhost:5000/controller:latest
+make docker-build </br>
+docker tag controller:latest localhost:5000/controller:latest </br>
+docker push localhost:5000/controller:latest </br>
+make deploy IMG=localhost:5000/controller:latest </br>
 
 kubectl create secret generic sapcp-operator-secret --from-literal=clientid="< clientid >" --from-literal=clientsecret="< secret >" --from-literal=url="< sm_url >" --from-literal=subdomain="< subdomain >" --namespace=sapcp-operator-system </br>
 e.g.
