@@ -93,7 +93,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		fakeClient = &smclientfakes.FakeClient{}
 		fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
 		fakeClient.DeprovisionReturns("", nil)
-		fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}}, nil)
+		fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}}, nil)
 	})
 
 	AfterEach(func() {
@@ -412,7 +412,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					JustBeforeEach(func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
-						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}, nil)
+						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}, nil)
 					})
 					It("should not fail", func() {
 						Eventually(func() bool {

@@ -144,29 +144,14 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	log.Info(fmt.Sprintf("Updating instance with ID %s", serviceInstance.Status.InstanceID))
 	smClient, err := r.getSMClient(ctx, log, serviceInstance)
 	if err != nil {
-		setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
+		setFailureConditions(smTypes.UPDATE, fmt.Sprintf("failed to update service-manager client: %s", err.Error()), serviceInstance)
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
 	}
 
-	var smServiceInstance *types.ServiceInstance
-	if smServiceInstance, err = smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{}); err != nil {
-		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-			log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating...", serviceInstance.Status.InstanceID))
-			return r.createInstance(ctx, serviceInstance, log, smClient)
-		}
-		log.Error(err, "failed to fetch service instance from SM")
-		//TODO what should be the message?
-		setFailureConditions(smTypes.UPDATE, "", serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-	}
-
-	return r.updateInstance(ctx, serviceInstance, log, smServiceInstance, smClient)
+	return r.updateInstance(ctx, serviceInstance, log, smClient)
 }
 
 func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
@@ -306,7 +291,27 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smServiceInstance *types.ServiceInstance, smClient smclient.Client) (ctrl.Result, error) {
+func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
+	var err error
+	var smServiceInstance *types.ServiceInstance
+	if smServiceInstance, err = smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{}); err != nil {
+		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
+			log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating...", serviceInstance.Status.InstanceID))
+			return r.createInstance(ctx, serviceInstance, log, smClient)
+		}
+		log.Error(err, "failed to fetch service instance from SM")
+		setFailureConditions(smTypes.UPDATE, fmt.Sprintf("could not fetch instance from SM: %v", err), serviceInstance)
+		if updateStatusErr := r.updateStatus(ctx, serviceInstance, log); updateStatusErr != nil {
+			return ctrl.Result{}, updateStatusErr
+		}
+		return ctrl.Result{}, err
+	}
+
+	if !smServiceInstance.Ready {
+		log.Info(fmt.Sprintf("instance ID %s not ready unable to update", serviceInstance.Status.InstanceID))
+		return ctrl.Result{}, nil
+	}
+
 	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
 	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	log.Info("updating instance in SM")
