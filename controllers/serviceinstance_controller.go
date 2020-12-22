@@ -77,6 +77,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		}
 	}
 
+	//TODO update only on final state, currently if creation fails on 429 it will not be retried
 	if serviceInstance.Generation == serviceInstance.Status.ObservedGeneration {
 		log.Info(fmt.Sprintf("Spec is not changed - ignoring... Generation is - %v", serviceInstance.Generation))
 		return ctrl.Result{}, nil
@@ -100,7 +101,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 		//Recovery
 		log.Info("Instance ID is empty, checking if instance exist in SM")
-		instance, err := r.getInstanceIfExists(smClient, serviceInstance, log)
+		instance, err := r.getInstanceForRecovery(smClient, serviceInstance, log)
 		if err != nil {
 			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
 		}
@@ -142,6 +143,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 
 	status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
 	if err != nil {
+		//TODO consider delete operation and maybe we should fail if operation does not exists
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", err.Error()), "operationURL", serviceInstance.Status.OperationURL)
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceInstance.Status.OperationURL))
@@ -435,7 +437,7 @@ func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1
 	case smTypes.PENDING:
 		fallthrough
 	case smTypes.IN_PROGRESS:
-		k8sInstance.Status.OperationURL = util.BuildOperationURL(smInstance.LastOperation.ID, smInstance.ID, web.ServiceInstancesURL)
+		k8sInstance.Status.OperationURL = smclient.BuildOperationURL(smInstance.LastOperation.ID, smInstance.ID, web.ServiceInstancesURL)
 		k8sInstance.Status.OperationType = smInstance.LastOperation.Type
 		setInProgressCondition(smInstance.LastOperation.Type, smInstance.LastOperation.Description, k8sInstance)
 	case smTypes.SUCCEEDED:
@@ -497,7 +499,7 @@ func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceIns
 	return nil
 }
 
-func (r *ServiceInstanceReconciler) getInstanceIfExists(smClient smclient.Client, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (*types.ServiceInstance, error) {
+func (r *ServiceInstanceReconciler) getInstanceForRecovery(smClient smclient.Client, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (*types.ServiceInstance, error) {
 	parameters := smclient.Parameters{
 		FieldQuery: []string{
 			fmt.Sprintf("name eq '%s'", serviceInstance.Spec.ExternalName)},

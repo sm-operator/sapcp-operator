@@ -103,6 +103,7 @@ var _ = Describe("ServiceInstance controller", func() {
 	})
 
 	Describe("Create", func() {
+		//TODO add test for create instance that fails the first time but succeed the next time
 		Context("Invalid parameters", func() {
 			createInstanceWithFailure := func(spec v1alpha1.ServiceInstanceSpec) {
 				instance := &v1alpha1.ServiceInstance{
@@ -160,11 +161,11 @@ var _ = Describe("ServiceInstance controller", func() {
 
 		Context("Sync", func() {
 			When("provision request to SM succeeds", func() {
-				It("should provision instance of the provided offering and plan name successfully", func() {
+				FIt("should provision instance of the provided offering and plan name successfully", func() {
 					serviceInstance = createInstance(ctx, instanceSpec)
 					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 					Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
-					Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
+					Expect(serviceInstance.Name).To(Equal("fakeInstanceName"))
 				})
 			})
 
