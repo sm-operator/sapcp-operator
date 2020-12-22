@@ -324,7 +324,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Eventually(func() bool {
 						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
-					}, syncPeriod+time.Second, interval).Should(BeTrue())
+					}, timeout*2, interval).Should(BeTrue())
 				})
 			})
 
@@ -348,7 +348,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Eventually(func() bool {
 						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
-					}, pollInterval+time.Second, interval).Should(BeTrue())
+					}, 2*time.Minute, interval).Should(BeTrue())
 				})
 			})
 		})

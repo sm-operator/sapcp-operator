@@ -143,15 +143,30 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	log.Info("Binding ID is empty, checking if exist in SM")
-	binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
+	smBinding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
 	if err != nil {
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
 	}
-	if binding != nil {
-		log.Info(fmt.Sprintf("found existing binding in SM with id %s, updating status", binding.ID))
-		r.resyncBindingStatus(serviceBinding, binding)
-		err := r.updateStatus(ctx, serviceBinding, log)
-		return ctrl.Result{}, err
+	if smBinding != nil {
+		log.Info(fmt.Sprintf("found existing binding in SM with id %s, updating status", smBinding.ID))
+		if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if smBinding.LastOperation.Type != smTypes.CREATE || smBinding.LastOperation.State == smTypes.SUCCEEDED {
+			// store secret unless binding is still being created or failed during creation
+			if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
+				setFailureConditions(smBinding.LastOperation.Type, err.Error(), serviceBinding)
+				return ctrl.Result{}, err
+			}
+		}
+
+		r.resyncBindingStatus(serviceBinding, smBinding)
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
 
 	return r.createBinding(ctx, smClient, serviceBinding, serviceInstance, log)

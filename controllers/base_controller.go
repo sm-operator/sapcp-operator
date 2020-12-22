@@ -21,9 +21,10 @@ const (
 	namespaceLabel    = "_namespace"
 	k8sNameLabel      = "_k8sname"
 	clusterIDLabel    = "_clusterid"
-	Created           = "Created"
-	Updated           = "Updated"
-	Deleted           = "Deleted"
+
+	Created = "Created"
+	Updated = "Updated"
+	Deleted = "Deleted"
 
 	CreateInProgress = "CreateInProgress"
 	UpdateInProgress = "UpdateInProgress"
