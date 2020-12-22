@@ -14,6 +14,7 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/smclientfakes"
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
+	"github.com/sm-operator/sapcp-operator/internal/util"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -391,7 +392,7 @@ var _ = Describe("ServiceBinding controller", func() {
 							Expect(err).ToNot(HaveOccurred())
 							smCallArgs := fakeClient.ListBindingsArgsForCall(0)
 							Expect(smCallArgs.LabelQuery).To(HaveLen(3))
-							Expect(smCallArgs.FieldQuery).To(HaveLen(2))
+							Expect(smCallArgs.FieldQuery).To(HaveLen(1))
 							//TODO verify correct parameters used to find binding in SM are correct
 
 							if testCase.lastOpState == smTypes.FAILED {
@@ -535,7 +536,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 		Context("Async", func() {
 			JustBeforeEach(func() {
-				fakeClient.UnbindReturns(buildOperationURL("an-operation-id", fakeBindingID, web.ServiceBindingsURL), nil)
+				fakeClient.UnbindReturns(util.BuildOperationURL("an-operation-id", fakeBindingID, web.ServiceBindingsURL), nil)
 			})
 
 			When("polling ends with success", func() {

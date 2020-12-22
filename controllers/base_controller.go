@@ -4,22 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-
 	smTypes "github.com/Peripli/service-manager/pkg/types"
-	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
 	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"github.com/sm-operator/sapcp-operator/internal"
+	"github.com/sm-operator/sapcp-operator/internal/config"
+	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	Created = "Created"
-	Updated = "Updated"
-	Deleted = "Deleted"
+	subaccountIDLabel = "subaccount_id"
+	namespaceLabel    = "_namespace"
+	k8sNameLabel      = "_k8sname"
+	clusterIDLabel    = "_clusterid"
+	Created           = "Created"
+	Updated           = "Updated"
+	Deleted           = "Deleted"
 
 	CreateInProgress = "CreateInProgress"
 	UpdateInProgress = "UpdateInProgress"
@@ -32,24 +36,54 @@ const (
 	Unknown = "Unknown"
 )
 
-// Helper functions to check and remove string from a slice of strings.
-func containsString(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
+type BaseReconciler struct {
+	client.Client
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	SMClient       func() smclient.Client
+	Config         config.Config
+	SecretResolver *secrets.SecretResolver
 }
 
-func removeString(slice []string, s string) (result []string) {
-	for _, item := range slice {
-		if item == s {
-			continue
+func getParameters(sapResource internal.SAPCPResource) (json.RawMessage, error) {
+	var instanceParameters json.RawMessage
+	if sapResource.GetParameters() != nil {
+		parametersJSON, err := sapResource.GetParameters().MarshalJSON()
+		if err != nil {
+			return nil, err
 		}
-		result = append(result, item)
+		instanceParameters = parametersJSON
 	}
-	return
+	return instanceParameters, nil
+}
+
+func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, namespace string) (smclient.Client, error) {
+	if r.SMClient != nil {
+		return r.SMClient(), nil
+	}
+
+	secret, err := r.SecretResolver.GetSecretForResource(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	if secret == nil {
+		return nil, fmt.Errorf("cannot create SM client - secret is missing")
+	}
+	secretData := secret.Data
+	cl, err := smclient.NewClient(ctx, &smclient.ClientConfig{
+		ClientID:     string(secretData["clientid"]),
+		ClientSecret: string(secretData["clientsecret"]),
+		URL:          string(secretData["url"]),
+		Subdomain:    string(secretData["subdomain"]),
+		SSLDisabled:  false,
+	}, nil)
+
+	if err != nil {
+		log.Error(err, "Failed to initialize SM client")
+		return nil, err
+	}
+	return cl, nil
 }
 
 func conditionChanged(condition servicesv1alpha1.Condition, otherCondition *servicesv1alpha1.Condition) bool {
@@ -58,35 +92,35 @@ func conditionChanged(condition servicesv1alpha1.Condition, otherCondition *serv
 		condition.Reason != otherCondition.Reason
 }
 
-func buildOperationURL(operationID, resourceID, resourceURL string) string {
-	return fmt.Sprintf("%s/%s%s/%s", resourceURL, resourceID, web.ResourceOperationsURL, operationID)
-}
-
-func isDelete(object v1.ObjectMeta) bool {
-	return !object.DeletionTimestamp.IsZero()
-}
-
-func normalizeCredentials(credentialsJSON json.RawMessage) (map[string][]byte, error) {
-	var credentialsMap map[string]interface{}
-	err := json.Unmarshal(credentialsJSON, &credentialsMap)
-	if err != nil {
-		return nil, err
-	}
-
-	normalized := make(map[string][]byte)
-	for propertyName, value := range credentialsMap {
-		keyString := strings.Replace(propertyName, " ", "_", -1)
-		// need to re-marshal as json might have complex types, which need to be flattened in strings
-		jString, err := json.Marshal(value)
-		if err != nil {
-			return normalized, err
+func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {
+	switch state {
+	case smTypes.SUCCEEDED:
+		if opType == smTypes.CREATE {
+			return Created
+		} else if opType == smTypes.UPDATE {
+			return Updated
+		} else if opType == smTypes.DELETE {
+			return Deleted
 		}
-		// need to remove quotes from flattened objects
-		strVal := strings.TrimPrefix(string(jString), "\"")
-		strVal = strings.TrimSuffix(strVal, "\"")
-		normalized[keyString] = []byte(strVal)
+	case smTypes.IN_PROGRESS, smTypes.PENDING:
+		if opType == smTypes.CREATE {
+			return CreateInProgress
+		} else if opType == smTypes.UPDATE {
+			return UpdateInProgress
+		} else if opType == smTypes.DELETE {
+			return DeleteInProgress
+		}
+	case smTypes.FAILED:
+		if opType == smTypes.CREATE {
+			return CreateFailed
+		} else if opType == smTypes.UPDATE {
+			return UpdateFailed
+		} else if opType == smTypes.DELETE {
+			return DeleteFailed
+		}
 	}
-	return normalized, nil
+
+	return Unknown
 }
 
 func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SAPCPResource) {
@@ -193,54 +227,6 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 	return false
 }
 
-func getSMClient(ctx context.Context, secret *corev1.Secret, log logr.Logger) (smclient.Client, error) {
-	if secret == nil {
-		return nil, fmt.Errorf("cannot create SM client - secret is missing")
-	}
-	secretData := secret.Data
-	cl, err := smclient.NewClient(ctx, &smclient.ClientConfig{
-		ClientID:     string(secretData["clientid"]),
-		ClientSecret: string(secretData["clientsecret"]),
-		URL:          string(secretData["url"]),
-		Subdomain:    string(secretData["subdomain"]),
-		SSLDisabled:  false,
-	}, nil)
-
-	if err != nil {
-		log.Error(err, "Failed to initialize SM client")
-		return nil, err
-	}
-	return cl, nil
-
-}
-
-func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {
-	switch state {
-	case smTypes.SUCCEEDED:
-		if opType == smTypes.CREATE {
-			return Created
-		} else if opType == smTypes.UPDATE {
-			return Updated
-		} else if opType == smTypes.DELETE {
-			return Deleted
-		}
-	case smTypes.IN_PROGRESS, smTypes.PENDING:
-		if opType == smTypes.CREATE {
-			return CreateInProgress
-		} else if opType == smTypes.UPDATE {
-			return UpdateInProgress
-		} else if opType == smTypes.DELETE {
-			return DeleteInProgress
-		}
-	case smTypes.FAILED:
-		if opType == smTypes.CREATE {
-			return CreateFailed
-		} else if opType == smTypes.UPDATE {
-			return UpdateFailed
-		} else if opType == smTypes.DELETE {
-			return DeleteFailed
-		}
-	}
-
-	return Unknown
+func isDelete(object v1.ObjectMeta) bool {
+	return !object.DeletionTimestamp.IsZero()
 }

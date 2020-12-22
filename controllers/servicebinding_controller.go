@@ -18,23 +18,19 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/sm-operator/sapcp-operator/internal/util"
 	"net/http"
-
-	"github.com/sm-operator/sapcp-operator/internal/secrets"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,12 +42,7 @@ const bindingFinalizerName string = "storage.finalizers.peripli.io.service-manag
 
 // ServiceBindingReconciler reconciles a ServiceBinding object
 type ServiceBindingReconciler struct {
-	client.Client
-	Log            logr.Logger
-	Scheme         *runtime.Scheme
-	SMClient       func() smclient.Client
-	Config         config.Config
-	SecretResolver *secrets.SecretResolver
+	*BaseReconciler
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=servicebindings,verbs=get;list;watch;create;update;patch;delete
@@ -81,7 +72,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
 		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 		if err != nil {
 			setFailureConditions(serviceBinding.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -171,7 +162,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	if isDelete(serviceBinding.ObjectMeta) {
-		if containsString(serviceBinding.Finalizers, bindingFinalizerName) {
+		if util.ContainsString(serviceBinding.Finalizers, bindingFinalizerName) {
 			if len(serviceBinding.Status.BindingID) == 0 {
 				// make sure there's no secret stored for the binding
 				if err := r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
@@ -187,7 +178,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			}
 
 			// our finalizer is present, so we need to delete the binding in SM
-			smClient, err := r.getSMClient(ctx, log, serviceBinding)
+			smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 			if err != nil {
 				setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
 				if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -282,7 +273,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		// The object is not being deleted, so if it does not have our finalizer,
 		// then lets add the finalizer and update the object. This is equivalent
 		// registering our finalizer.
-		if !containsString(serviceBinding.ObjectMeta.Finalizers, bindingFinalizerName) {
+		if !util.ContainsString(serviceBinding.ObjectMeta.Finalizers, bindingFinalizerName) {
 			log.Info("Binding has no finalizer, adding it...")
 			if err := r.addFinalizer(ctx, serviceBinding); err != nil {
 				return ctrl.Result{}, err
@@ -343,7 +334,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if serviceBinding.Status.BindingID == "" {
 		log.Info("Binding ID is empty, checking if exist in SM")
 
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -354,12 +345,11 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		}
 		parameters := smclient.Parameters{
 			FieldQuery: []string{
-				fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName),
-				fmt.Sprintf("service_instance_id eq '%s'", serviceInstance.Status.InstanceID)},
+				fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName)},
 			LabelQuery: []string{
-				fmt.Sprintf("_clusterid eq '%s'", r.Config.ClusterID),
-				fmt.Sprintf("_namespace eq '%s'", serviceBinding.Namespace),
-				fmt.Sprintf("_k8sname eq '%s'", serviceBinding.Name)},
+				fmt.Sprintf("%s eq '%s'", clusterIDLabel, r.Config.ClusterID),
+				fmt.Sprintf("%s eq '%s'", namespaceLabel, serviceInstance.Namespace),
+				fmt.Sprintf("%s eq '%s'", k8sNameLabel, serviceInstance.Name)},
 			GeneralParams: []string{"attach_last_operations=true"},
 		}
 
@@ -403,7 +393,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		labels["_k8sname"] = []string{serviceBinding.Name}
 		labels["_clusterid"] = []string{r.Config.ClusterID}
 
-		bindingParameters, err := getBindingParameters(serviceBinding)
+		bindingParameters, err := getParameters(serviceBinding)
 		if err != nil {
 			log.Error(err, "failed to parse smBinding parameters")
 			return ctrl.Result{}, err
@@ -552,22 +542,9 @@ func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Logger, binding *v1alpha1.ServiceBinding) (smclient.Client, error) {
-	if r.SMClient != nil {
-		return r.SMClient(), nil
-	}
-
-	secret, err := r.SecretResolver.GetSecretForResource(ctx, binding)
-	if err != nil {
-		return nil, err
-	}
-
-	return getSMClient(ctx, secret, log)
-}
-
 func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
 	log.Info("removing finalizer")
-	binding.Finalizers = removeString(binding.Finalizers, bindingFinalizerName)
+	binding.Finalizers = util.RemoveString(binding.Finalizers, bindingFinalizerName)
 	//binding.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	if err := r.Update(ctx, binding); err != nil {
 		return err
@@ -593,7 +570,7 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.Serv
 	case smTypes.PENDING:
 		fallthrough
 	case smTypes.IN_PROGRESS:
-		k8sBinding.Status.OperationURL = buildOperationURL(smBinding.LastOperation.ID, smBinding.ID, web.ServiceBindingsURL)
+		k8sBinding.Status.OperationURL = util.BuildOperationURL(smBinding.LastOperation.ID, smBinding.ID, web.ServiceBindingsURL)
 		k8sBinding.Status.OperationType = smBinding.LastOperation.Type
 		setInProgressCondition(smBinding.LastOperation.Type, smBinding.LastOperation.Description, k8sBinding)
 	case smTypes.SUCCEEDED:
@@ -612,7 +589,7 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 		credentialsMap = make(map[string][]byte)
 	} else {
 		var err error
-		credentialsMap, err = normalizeCredentials(smBinding.Credentials)
+		credentialsMap, err = util.NormalizeCredentials(smBinding.Credentials)
 		if err != nil {
 			logger.Error(err, "Failed to store binding secret")
 			return fmt.Errorf("failed to store binding secret: %s", err.Error())
@@ -665,16 +642,4 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 	}
 
 	return nil
-}
-
-func getBindingParameters(binding *v1alpha1.ServiceBinding) (json.RawMessage, error) {
-	var instanceParameters json.RawMessage
-	if binding.Spec.Parameters != nil {
-		parametersJSON, err := binding.Spec.Parameters.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		instanceParameters = parametersJSON
-	}
-	return instanceParameters, nil
 }
