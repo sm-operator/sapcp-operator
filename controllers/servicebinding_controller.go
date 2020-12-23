@@ -72,122 +72,15 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	if isDelete(serviceBinding.ObjectMeta) {
-		if containsString(serviceBinding.Finalizers, bindingFinalizerName) {
-			if len(serviceBinding.Status.BindingID) == 0 {
-				// make sure there's no secret stored for the binding
-				if err := r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				log.Info("Binding does not exists in SM, removing finalizer")
-				if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-					log.Error(err, "failed to remove finalizer")
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, nil
-			}
-
-			// our finalizer is present, so we need to delete the binding in SM
-			smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
-			if err != nil {
-				setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					log.Error(err, "unable to update ServiceBinding status")
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, err
-			}
-
-			log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
-			operationURL, err := smClient.Unbind(serviceBinding.Status.BindingID, nil)
-			if err != nil {
-				smError, ok := err.(*smclient.ServiceManagerError)
-				if ok {
-					if smError.StatusCode == http.StatusNotFound {
-						log.Info(fmt.Sprintf("Binding id %s not found in SM", serviceBinding.Status.BindingID))
-						//if not found it means success
-						serviceBinding.Status.BindingID = ""
-						setSuccessConditions(smTypes.DELETE, serviceBinding)
-						if err := r.Status().Update(ctx, serviceBinding); err != nil {
-							return ctrl.Result{}, err
-						}
-
-						// delete binding secret if exist
-						if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-							return ctrl.Result{}, err
-						}
-
-						// remove our finalizer from the list and update it.
-						if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-							log.Error(err, "failed to remove finalizer")
-							return ctrl.Result{}, err
-						}
-
-						// Stop reconciliation as the item is deleted
-						return ctrl.Result{}, nil
-					} else if smError.StatusCode == http.StatusTooManyRequests {
-						setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceBinding)
-						if err := r.Update(ctx, serviceBinding); err != nil {
-							log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
-						}
-						return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
-					}
-				}
-
-				log.Error(err, "failed to delete binding")
-				// if fail to delete the binding in SM, return with error
-				// so that it can be retried
-				if setFailureConditions(smTypes.DELETE, err.Error(), serviceBinding) {
-					if err := r.Status().Update(ctx, serviceBinding); err != nil {
-						return ctrl.Result{}, err
-					}
-				}
-
-				return ctrl.Result{}, err
-			}
-
-			if operationURL != "" {
-				log.Info("Deleting binding async")
-				serviceBinding.Status.OperationURL = operationURL
-				serviceBinding.Status.OperationType = smTypes.DELETE
-				setInProgressCondition(smTypes.DELETE, "", serviceBinding)
-
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-			}
-
-			log.Info("Binding was deleted successfully")
-			serviceBinding.Status.BindingID = ""
-			setSuccessConditions(smTypes.DELETE, serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			// remove our finalizer from the list and update it.
-			if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-				log.Error(err, "failed to remove finalizer")
-				return ctrl.Result{}, err
-			}
-
-			// Stop reconciliation as the item is being deleted
-			return ctrl.Result{}, nil
-		}
-	} else {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !containsString(serviceBinding.ObjectMeta.Finalizers, bindingFinalizerName) {
-			log.Info("Binding has no finalizer, adding it...")
-			if err := r.addFinalizer(ctx, serviceBinding); err != nil {
-				return ctrl.Result{}, err
-			}
+		return r.delete(ctx, serviceBinding, log)
+	}
+	// The object is not being deleted, so if it does not have our finalizer,
+	// then lets add the finalizer and update the object. This is equivalent
+	// registering our finalizer.
+	if !containsString(serviceBinding.ObjectMeta.Finalizers, bindingFinalizerName) {
+		log.Info("Binding has no finalizer, adding it...")
+		if err := r.addFinalizer(ctx, serviceBinding); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -364,6 +257,113 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		return ctrl.Result{}, nil
 	}
 
+	return ctrl.Result{}, nil
+}
+
+func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
+	if containsString(serviceBinding.Finalizers, bindingFinalizerName) {
+		if len(serviceBinding.Status.BindingID) == 0 {
+			// make sure there's no secret stored for the binding
+			if err := r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Binding does not exists in SM, removing finalizer")
+			if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
+		// our finalizer is present, so we need to delete the binding in SM
+		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
+		if err != nil {
+			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "unable to update ServiceBinding status")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+
+		log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
+		operationURL, err := smClient.Unbind(serviceBinding.Status.BindingID, nil)
+		if err != nil {
+			smError, ok := err.(*smclient.ServiceManagerError)
+			if ok {
+				if smError.StatusCode == http.StatusNotFound || smError.StatusCode == http.StatusGone {
+					log.Info(fmt.Sprintf("Binding id %s not found in SM", serviceBinding.Status.BindingID))
+					//if not found it means success
+					serviceBinding.Status.BindingID = ""
+					setSuccessConditions(smTypes.DELETE, serviceBinding)
+					if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+						return ctrl.Result{}, err
+					}
+
+					// delete binding secret if exist
+					if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+						return ctrl.Result{}, err
+					}
+
+					// remove our finalizer from the list and update it.
+					if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+						log.Error(err, "failed to remove finalizer")
+						return ctrl.Result{}, err
+					}
+
+					// Stop reconciliation as the item is deleted
+					return ctrl.Result{}, nil
+				} else if smError.StatusCode == http.StatusTooManyRequests {
+					setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceBinding)
+					if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+						log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
+					}
+					return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
+				}
+			}
+
+			log.Error(err, "failed to delete binding")
+			// if fail to delete the binding in SM, return with error
+			// so that it can be retried
+			if setFailureConditions(smTypes.DELETE, err.Error(), serviceBinding) {
+				if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			return ctrl.Result{}, err
+		}
+
+		if operationURL != "" {
+			log.Info("Deleting binding async")
+			serviceBinding.Status.OperationURL = operationURL
+			serviceBinding.Status.OperationType = smTypes.DELETE
+			setInProgressCondition(smTypes.DELETE, "", serviceBinding)
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+		}
+
+		log.Info("Binding was deleted successfully")
+		serviceBinding.Status.BindingID = ""
+		setSuccessConditions(smTypes.DELETE, serviceBinding)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// remove our finalizer from the list and update it.
+		if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+			log.Error(err, "failed to remove finalizer")
+			return ctrl.Result{}, err
+		}
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
