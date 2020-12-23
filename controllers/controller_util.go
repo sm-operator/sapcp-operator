@@ -2,10 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
-
-	"github.com/Peripli/service-manager/pkg/web"
 )
 
 // Helper functions to check and remove string from a slice of strings.
@@ -26,10 +23,6 @@ func removeString(slice []string, s string) (result []string) {
 		result = append(result, item)
 	}
 	return
-}
-
-func buildOperationURL(operationID, resourceID, resourceURL string) string {
-	return fmt.Sprintf("%s/%s%s/%s", resourceURL, resourceID, web.ResourceOperationsURL, operationID)
 }
 
 func normalizeCredentials(credentialsJSON json.RawMessage) (map[string][]byte, error) {

@@ -535,7 +535,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 		Context("Async", func() {
 			JustBeforeEach(func() {
-				fakeClient.UnbindReturns(buildOperationURL("an-operation-id", fakeBindingID, web.ServiceBindingsURL), nil)
+				fakeClient.UnbindReturns(smclient.BuildOperationURL("an-operation-id", fakeBindingID, web.ServiceBindingsURL), nil)
 			})
 
 			When("polling ends with success", func() {
