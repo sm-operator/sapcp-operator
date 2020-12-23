@@ -9,7 +9,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 //TODO + revisit the name based approach for managed secret, replace with label based mechanism + admission webhook for secrets to avoid duplications
@@ -25,14 +24,14 @@ type SecretResolver struct {
 	Log                    logr.Logger
 }
 
-func (sr *SecretResolver) GetSecretForResource(ctx context.Context, resource controllerutil.Object) (*v1.Secret, error) {
+func (sr *SecretResolver) GetSecretForResource(ctx context.Context, namespace string) (*v1.Secret, error) {
 	var secretForResource *v1.Secret
 	var err error
 	found := false
 
 	if sr.EnableNamespaceSecrets {
-		sr.Log.Info("Searching for secret in resource namespace", "namespace", resource.GetNamespace())
-		secretForResource, err = sr.getSecretFromNamespace(ctx, resource.GetNamespace())
+		sr.Log.Info("Searching for secret in resource namespace", "namespace", namespace)
+		secretForResource, err = sr.getSecretFromNamespace(ctx, namespace)
 		if client.IgnoreNotFound(err) != nil {
 			return nil, err
 		}
@@ -42,8 +41,8 @@ func (sr *SecretResolver) GetSecretForResource(ctx context.Context, resource con
 
 	if !found {
 		// secret not found in resource namespace, search for namespace-specific secret in management namespace
-		sr.Log.Info("Searching for namespace secret in management namespace", "namespace", resource.GetNamespace(), "managementNamespace", sr.ManagementNamespace)
-		secretForResource, err = sr.getSecretForNamespace(ctx, resource.GetNamespace())
+		sr.Log.Info("Searching for namespace secret in management namespace", "namespace", namespace, "managementNamespace", sr.ManagementNamespace)
+		secretForResource, err = sr.getSecretForNamespace(ctx, namespace)
 		if client.IgnoreNotFound(err) != nil {
 			return nil, err
 		}

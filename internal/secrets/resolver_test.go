@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,18 +65,14 @@ var _ = Describe("Secrets Resolver", func() {
 	}
 
 	validateSecretResolved := func() {
-		resolvedSecret, err := resolver.GetSecretForResource(ctx, &v1alpha1.ServiceInstance{
-			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace},
-		})
+		resolvedSecret, err := resolver.GetSecretForResource(ctx, testNamespace)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resolvedSecret).ToNot(BeNil())
 		Expect(string(resolvedSecret.Data["clientid"])).To(Equal(expectedClientID))
 	}
 
 	validateSecretNotResolved := func() {
-		_, err := resolver.GetSecretForResource(ctx, &v1alpha1.ServiceInstance{
-			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "test"},
-		})
+		_, err := resolver.GetSecretForResource(ctx, testNamespace)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("cannot find sapcp operator secret"))
 	}

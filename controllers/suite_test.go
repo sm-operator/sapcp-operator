@@ -112,11 +112,13 @@ var _ = BeforeSuite(func(done Done) {
 	fakeClient = &smclientfakes.FakeClient{}
 	testConfig := config.Config{SyncPeriod: syncPeriod, PollInterval: pollInterval}
 	err = (&ServiceInstanceReconciler{
-		Client:   k8sManager.GetClient(),
-		Scheme:   k8sManager.GetScheme(),
-		Log:      ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
-		SMClient: func() smclient.Client { return fakeClient },
-		Config:   testConfig,
+		BaseReconciler: &BaseReconciler{
+			Client:   k8sManager.GetClient(),
+			Scheme:   k8sManager.GetScheme(),
+			Log:      ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
+			SMClient: func() smclient.Client { return fakeClient },
+			Config:   testConfig,
+		},
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -124,11 +126,13 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&ServiceBindingReconciler{
-		Client:   k8sManager.GetClient(),
-		Scheme:   k8sManager.GetScheme(),
-		Log:      ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
-		SMClient: func() smclient.Client { return fakeClient },
-		Config:   testConfig,
+		BaseReconciler: &BaseReconciler{
+			Client:   k8sManager.GetClient(),
+			Scheme:   k8sManager.GetScheme(),
+			Log:      ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
+			SMClient: func() smclient.Client { return fakeClient },
+			Config:   testConfig,
+		},
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

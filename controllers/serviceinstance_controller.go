@@ -26,31 +26,19 @@ import (
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
 	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	"github.com/sm-operator/sapcp-operator/internal/config"
-	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	types2 "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const instanceFinalizerName string = "storage.finalizers.peripli.io.service-manager.serviceInstance"
-const subaccountIDLabel string = "subaccount_id"
-const namespaceLabel string = "_namespace"
-const k8sNameLabel string = "_k8sname"
-const clusterIDLabel string = "_clusterid"
 
 // ServiceInstanceReconciler reconciles a ServiceInstance object
 type ServiceInstanceReconciler struct {
-	client.Client
-	Log            logr.Logger
-	Scheme         *runtime.Scheme
-	SMClient       func() smclient.Client
-	Config         config.Config
-	SecretResolver *secrets.SecretResolver
+	*BaseReconciler
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances,verbs=get;list;watch;create;update;patch;delete
@@ -103,7 +91,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		}
 
 		//Recovery
-		smClient, err := r.getSMClient(ctx, log, serviceInstance)
+		smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
 			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -142,7 +130,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 	//Update
 	log.Info(fmt.Sprintf("Updating instance with ID %s", serviceInstance.Status.InstanceID))
-	smClient, err := r.getSMClient(ctx, log, serviceInstance)
+	smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
 	if err != nil {
 		setFailureConditions(smTypes.UPDATE, fmt.Sprintf("failed to update service-manager client: %s", err.Error()), serviceInstance)
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -156,7 +144,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
 	log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceInstance.Status.OperationURL))
-	smClient, err := r.getSMClient(ctx, log, serviceInstance)
+	smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
 	if err != nil {
 		setFailureConditions(serviceInstance.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -372,7 +360,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		}
 
 		// our finalizer is present, so we need to delete the instance in SM
-		smClient, err := r.getSMClient(ctx, log, serviceInstance)
+		smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
 			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -503,19 +491,6 @@ func (r *ServiceInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&servicesv1alpha1.ServiceInstance{}).
 		Complete(r)
-}
-
-func (r *ServiceInstanceReconciler) getSMClient(ctx context.Context, log logr.Logger, instance *servicesv1alpha1.ServiceInstance) (smclient.Client, error) {
-	if r.SMClient != nil {
-		return r.SMClient(), nil
-	}
-
-	secret, err := r.SecretResolver.GetSecretForResource(ctx, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	return getSMClient(ctx, secret, log)
 }
 
 func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {

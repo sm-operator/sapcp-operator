@@ -79,21 +79,25 @@ func main() {
 	}
 
 	if err = (&controllers.ServiceInstanceReconciler{
-		Client:         mgr.GetClient(),
-		Log:            ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
-		Scheme:         mgr.GetScheme(),
-		Config:         config.Get(),
-		SecretResolver: secretResolver,
+		BaseReconciler: &controllers.BaseReconciler{
+			Client:         mgr.GetClient(),
+			Log:            ctrl.Log.WithName("controllers").WithName("ServiceInstance"),
+			Scheme:         mgr.GetScheme(),
+			Config:         config.Get(),
+			SecretResolver: secretResolver,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceInstance")
 		os.Exit(1)
 	}
 	if err = (&controllers.ServiceBindingReconciler{
-		Client:         mgr.GetClient(),
-		Log:            ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
-		Scheme:         mgr.GetScheme(),
-		Config:         config.Get(),
-		SecretResolver: secretResolver,
+		BaseReconciler: &controllers.BaseReconciler{
+			Client:         mgr.GetClient(),
+			Log:            ctrl.Log.WithName("controllers").WithName("ServiceBinding"),
+			Scheme:         mgr.GetScheme(),
+			Config:         config.Get(),
+			SecretResolver: secretResolver,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceBinding")
 		os.Exit(1)

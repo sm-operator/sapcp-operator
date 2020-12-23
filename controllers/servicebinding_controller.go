@@ -22,19 +22,15 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sm-operator/sapcp-operator/internal/secrets"
-
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,12 +42,7 @@ const bindingFinalizerName string = "storage.finalizers.peripli.io.service-manag
 
 // ServiceBindingReconciler reconciles a ServiceBinding object
 type ServiceBindingReconciler struct {
-	client.Client
-	Log            logr.Logger
-	Scheme         *runtime.Scheme
-	SMClient       func() smclient.Client
-	Config         config.Config
-	SecretResolver *secrets.SecretResolver
+	*BaseReconciler
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=servicebindings,verbs=get;list;watch;create;update;patch;delete
@@ -64,8 +55,6 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	ctx := context.Background()
 	// TODO optimize log - use withValue where possible
 	log := r.Log.WithValues("servicebinding", req.NamespacedName)
-
-	// your logic here
 
 	serviceBinding := &v1alpha1.ServiceBinding{}
 	if err := r.Get(ctx, req.NamespacedName, serviceBinding); err != nil {
@@ -81,7 +70,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
 		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 		if err != nil {
 			setFailureConditions(serviceBinding.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -187,7 +176,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			}
 
 			// our finalizer is present, so we need to delete the binding in SM
-			smClient, err := r.getSMClient(ctx, log, serviceBinding)
+			smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 			if err != nil {
 				setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
 				if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -343,7 +332,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if serviceBinding.Status.BindingID == "" {
 		log.Info("Binding ID is empty, checking if exist in SM")
 
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -550,19 +539,6 @@ func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.ServiceBinding{}).
 		Complete(r)
-}
-
-func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Logger, binding *v1alpha1.ServiceBinding) (smclient.Client, error) {
-	if r.SMClient != nil {
-		return r.SMClient(), nil
-	}
-
-	secret, err := r.SecretResolver.GetSecretForResource(ctx, binding)
-	if err != nil {
-		return nil, err
-	}
-
-	return getSMClient(ctx, secret, log)
 }
 
 func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
