@@ -391,7 +391,7 @@ var _ = Describe("ServiceBinding controller", func() {
 							Expect(err).ToNot(HaveOccurred())
 							smCallArgs := fakeClient.ListBindingsArgsForCall(0)
 							Expect(smCallArgs.LabelQuery).To(HaveLen(3))
-							Expect(smCallArgs.FieldQuery).To(HaveLen(2))
+							Expect(smCallArgs.FieldQuery).To(HaveLen(1))
 							//TODO verify correct parameters used to find binding in SM are correct
 
 							if testCase.lastOpState == smTypes.FAILED {

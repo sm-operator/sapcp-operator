@@ -83,13 +83,11 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
 	if serviceInstance.Status.InstanceID == "" {
-		log.Info("Instance ID is empty, checking if instance exist in SM")
 
 		if len(serviceInstance.Spec.ExternalName) == 0 {
 			serviceInstance.Spec.ExternalName = serviceInstance.Name
 		}
 
-		//Recovery
 		smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
@@ -98,6 +96,9 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 			}
 			return ctrl.Result{}, err
 		}
+
+		//Recovery
+		log.Info("Instance ID is empty, checking if instance exist in SM")
 		instance, err := r.getInstanceForRecovery(smClient, serviceInstance, log)
 		if err != nil {
 			log.Error(err, "failed to check instance recovery")
@@ -141,6 +142,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 
 	status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
 	if err != nil {
+		//TODO consider delete operation and maybe we should fail if operation does not exists
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", err.Error()), "operationURL", serviceInstance.Status.OperationURL)
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceInstance.Status.OperationURL))

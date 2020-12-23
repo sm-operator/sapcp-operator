@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -330,8 +329,6 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	if serviceBinding.Status.BindingID == "" {
-		log.Info("Binding ID is empty, checking if exist in SM")
-
 		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
@@ -341,41 +338,26 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			}
 			return ctrl.Result{}, err
 		}
-		parameters := smclient.Parameters{
-			FieldQuery: []string{
-				fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName),
-				fmt.Sprintf("service_instance_id eq '%s'", serviceInstance.Status.InstanceID)},
-			LabelQuery: []string{
-				fmt.Sprintf("_clusterid eq '%s'", r.Config.ClusterID),
-				fmt.Sprintf("_namespace eq '%s'", serviceBinding.Namespace),
-				fmt.Sprintf("_k8sname eq '%s'", serviceBinding.Name)},
-			GeneralParams: []string{"attach_last_operations=true"},
-		}
-
-		bindings, err := smClient.ListBindings(&parameters)
+		binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
 		if err != nil {
-			log.Error(err, "failed to list bindings in SM")
-			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
+			log.Error(err, "failed to list bindings from SM")
 		}
-		if bindings != nil && len(bindings.ServiceBindings) == 1 {
-
+		if binding != nil {
 			// Recovery - restore binding from SM
-
-			smBinding := &bindings.ServiceBindings[0]
-			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", smBinding.ID))
+			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", binding.ID))
 			if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
 				return ctrl.Result{}, err
 			}
 
-			if smBinding.LastOperation.Type != smTypes.CREATE || smBinding.LastOperation.State == smTypes.SUCCEEDED {
+			if binding.LastOperation.Type != smTypes.CREATE || binding.LastOperation.State == smTypes.SUCCEEDED {
 				// store secret unless binding is still being created or failed during creation
-				if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-					setFailureConditions(smBinding.LastOperation.Type, err.Error(), serviceBinding)
+				if err := r.storeBindingSecret(ctx, serviceBinding, binding, log); err != nil {
+					setFailureConditions(binding.LastOperation.Type, err.Error(), serviceBinding)
 					return ctrl.Result{}, err
 				}
 			}
 
-			r.resyncBindingStatus(serviceBinding, smBinding, serviceInstance.Status.InstanceID)
+			r.resyncBindingStatus(serviceBinding, binding, serviceInstance.Status.InstanceID)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
 				log.Error(err, "unable to update ServiceBinding status")
 				return ctrl.Result{}, err
@@ -392,7 +374,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		labels["_k8sname"] = []string{serviceBinding.Name}
 		labels["_clusterid"] = []string{r.Config.ClusterID}
 
-		bindingParameters, err := getBindingParameters(serviceBinding)
+		bindingParameters, err := getParameters(serviceBinding)
 		if err != nil {
 			log.Error(err, "failed to parse smBinding parameters")
 			return ctrl.Result{}, err
@@ -643,14 +625,45 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 	return nil
 }
 
-func getBindingParameters(binding *v1alpha1.ServiceBinding) (json.RawMessage, error) {
-	var instanceParameters json.RawMessage
-	if binding.Spec.Parameters != nil {
-		parametersJSON, err := binding.Spec.Parameters.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		instanceParameters = parametersJSON
+func (r *ServiceBindingReconciler) getBindingForRecovery(smClient smclient.Client, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (*smclientTypes.ServiceBinding, error) {
+	parameters := smclient.Parameters{
+		FieldQuery: []string{
+			fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName)},
+		LabelQuery: []string{
+			fmt.Sprintf("%s eq '%s'", clusterIDLabel, r.Config.ClusterID),
+			fmt.Sprintf("%s eq '%s'", namespaceLabel, serviceBinding.Namespace),
+			fmt.Sprintf("%s eq '%s'", k8sNameLabel, serviceBinding.Name)},
+		GeneralParams: []string{"attach_last_operations=true"},
 	}
-	return instanceParameters, nil
+
+	bindings, err := smClient.ListBindings(&parameters)
+	if err != nil {
+		log.Error(err, "failed to list bindings in SM")
+		return nil, err
+	}
+	if bindings != nil && len(bindings.ServiceBindings) == 1 {
+		return &bindings.ServiceBindings[0], nil
+	}
+
+	return nil, nil
+}
+
+func (r *ServiceBindingReconciler) updateStatus(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) error {
+	log.Info("updating service binding status")
+	if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		status := serviceBinding.Status
+		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest binding and trying again", err.Error()))
+		if err := r.Get(ctx, types.NamespacedName{Name: serviceBinding.Name, Namespace: serviceBinding.Namespace}, serviceBinding); err != nil {
+			log.Error(err, "failed to fetch latest binding")
+			return err
+		}
+
+		serviceBinding.Status = status
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			log.Error(err, "unable to update service binding status")
+			return err
+		}
+	}
+	log.Info("updated service binding status in k8s")
+	return nil
 }
