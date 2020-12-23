@@ -91,14 +91,12 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.Status.ObservedGeneration))
 
-	operationType := smTypes.CREATE
-
 	log.Info("service instance name " + serviceBinding.Spec.ServiceInstanceName + " binding namespace " + serviceBinding.Namespace)
 	serviceInstance, err := r.getServiceInstanceForBinding(ctx, serviceBinding)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Unable to find referenced service instance with k8s name %s", serviceBinding.Spec.ServiceInstanceName))
 
-		setFailureConditions(operationType,
+		setFailureConditions(smTypes.CREATE,
 			fmt.Sprintf("Unable to find referenced service instance with k8s name %s in namespace %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Namespace),
 			serviceBinding)
 		if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -111,7 +109,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if serviceInProgress(serviceInstance) {
 		log.Info(fmt.Sprintf("Service instance with k8s name %s is not ready for binding yet", serviceInstance.Name))
 
-		setInProgressCondition(operationType,
+		setInProgressCondition(smTypes.CREATE,
 			fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
 			serviceBinding)
 		if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -125,7 +123,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
 
-		updated := setFailureConditions(operationType, err.Error(), serviceBinding)
+		updated := setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
 		if updated {
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
 				return ctrl.Result{}, err
@@ -172,89 +170,94 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("Creating smBinding in SM")
-		labels := make(map[string][]string, 3)
+		return r.createBinding(ctx, smClient, serviceInstance, serviceBinding, log)
+	}
 
-		// add labels that can be used to construct OSB context in SM
-		labels["_namespace"] = []string{serviceInstance.Namespace}
-		labels["_k8sname"] = []string{serviceBinding.Name}
-		labels["_clusterid"] = []string{r.Config.ClusterID}
+	log.Error(fmt.Errorf("update binding is not allowed, this line should not be reached"), "")
+	return ctrl.Result{}, nil
+}
 
-		bindingParameters, err := getParameters(serviceBinding)
-		if err != nil {
-			log.Error(err, "failed to parse smBinding parameters")
+func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient smclient.Client, serviceInstance *v1alpha1.ServiceInstance, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
+	log.Info("Creating smBinding in SM")
+	labels := make(map[string][]string, 3)
+
+	// add labels that can be used to construct OSB context in SM
+	labels[namespaceLabel] = []string{serviceInstance.Namespace}
+	labels[k8sNameLabel] = []string{serviceBinding.Name}
+	labels[clusterIDLabel] = []string{r.Config.ClusterID}
+
+	bindingParameters, err := getParameters(serviceBinding)
+	if err != nil {
+		log.Error(err, "failed to parse smBinding parameters")
+		return ctrl.Result{}, err
+	}
+
+	smBinding, operationURL, err := smClient.Bind(&smclientTypes.ServiceBinding{
+		Name:              serviceBinding.Spec.ExternalName,
+		Labels:            labels,
+		ServiceInstanceID: serviceInstance.Status.InstanceID,
+		Parameters:        bindingParameters,
+	}, nil)
+
+	serviceBinding.Status.InstanceID = serviceInstance.Status.InstanceID
+	log.Info(fmt.Sprintf("Updating observed generation (%v) to generation (%v)", serviceBinding.Status.ObservedGeneration, serviceBinding.Generation))
+	serviceBinding.Status.ObservedGeneration = serviceBinding.Generation
+
+	if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
+		setFailureConditions(smTypes.CREATE, "", serviceBinding)
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, err
+	}
 
-		smBinding, operationURL, err := smClient.Bind(&smclientTypes.ServiceBinding{
-			Name:              serviceBinding.Spec.ExternalName,
-			Labels:            labels,
-			ServiceInstanceID: serviceInstance.Status.InstanceID,
-			Parameters:        bindingParameters,
-		}, nil)
-
-		serviceBinding.Status.InstanceID = serviceInstance.Status.InstanceID
-		log.Info(fmt.Sprintf("Updating observed generation (%v) to generation (%v)", serviceBinding.Status.ObservedGeneration, serviceBinding.Generation))
-		serviceBinding.Status.ObservedGeneration = serviceBinding.Generation
-
-		if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
-			setFailureConditions(smTypes.CREATE, "", serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, err
-		}
-
-		if err != nil {
-			log.Error(err, "failed to create smBinding", "serviceInstanceID", serviceInstance.Status.InstanceID)
-			setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, err
-		}
-
-		if operationURL != "" {
-			log.Info("Create smBinding request is async")
-			serviceBinding.Status.OperationURL = operationURL
-			serviceBinding.Status.OperationType = smTypes.CREATE
-			setInProgressCondition(smTypes.CREATE, "", serviceBinding)
-			serviceBinding.Status.BindingID = smclient.ExtractBindingID(operationURL)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-			if serviceBinding.Status.BindingID == "" {
-				return ctrl.Result{}, fmt.Errorf("failed to extract smBinding ID from operation URL %s", operationURL)
-			}
-
-			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-		}
-
-		log.Info("Binding created successfully")
-
-		if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-			log.Error(err, "failed to create secret")
-			setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, err
-		}
-
-		setSuccessConditions(smTypes.CREATE, serviceBinding)
-		serviceBinding.Status.BindingID = smBinding.ID
-		log.Info("Updating binding", "bindingID", smBinding.ID)
+	if err != nil {
+		log.Error(err, "failed to create smBinding", "serviceInstanceID", serviceInstance.Status.InstanceID)
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
 		if err := r.Status().Update(ctx, serviceBinding); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
+	}
+
+	if operationURL != "" {
+		log.Info("Create smBinding request is async")
+		serviceBinding.Status.OperationURL = operationURL
+		serviceBinding.Status.OperationType = smTypes.CREATE
+		setInProgressCondition(smTypes.CREATE, "", serviceBinding)
+		serviceBinding.Status.BindingID = smclient.ExtractBindingID(operationURL)
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
+			return ctrl.Result{}, err
+		}
+		if serviceBinding.Status.BindingID == "" {
+			return ctrl.Result{}, fmt.Errorf("failed to extract smBinding ID from operation URL %s", operationURL)
+		}
+
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+	}
+
+	log.Info("Binding created successfully")
+
+	if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
+		log.Error(err, "failed to create secret")
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
+	setSuccessConditions(smTypes.CREATE, serviceBinding)
+	serviceBinding.Status.BindingID = smBinding.ID
+	log.Info("Updating binding", "bindingID", smBinding.ID)
+	if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		log.Error(err, "unable to update ServiceBinding status")
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
