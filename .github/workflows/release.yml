@@ -12,8 +12,8 @@ jobs:
       - name: Push to GitHub Packages
         uses: docker/build-push-action@v1
         with:
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.OPERATOR_USER }}
+          password: ${{ secrets.OPERATOR_PAT }}
           registry: ghcr.io
           repository: sm-operator/sapcp-operator/controller
           tag_with_ref: true
