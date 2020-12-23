@@ -205,8 +205,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 
 	if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
 		setFailureConditions(smTypes.CREATE, "", serviceBinding)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
-			log.Error(err, "unable to update ServiceBinding status")
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -215,7 +214,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	if err != nil {
 		log.Error(err, "failed to create smBinding", "serviceInstanceID", serviceInstance.Status.InstanceID)
 		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
@@ -229,7 +228,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 		serviceBinding.Status.OperationType = smTypes.CREATE
 		setInProgressCondition(smTypes.CREATE, "", serviceBinding)
 		serviceBinding.Status.BindingID = smclient.ExtractBindingID(operationURL)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
@@ -255,8 +254,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	setSuccessConditions(smTypes.CREATE, serviceBinding)
 	serviceBinding.Status.BindingID = smBinding.ID
 	log.Info("Updating binding", "bindingID", smBinding.ID)
-	if err := r.Status().Update(ctx, serviceBinding); err != nil {
-		log.Error(err, "unable to update ServiceBinding status")
+	if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
