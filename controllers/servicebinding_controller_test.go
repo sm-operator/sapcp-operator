@@ -32,12 +32,12 @@ const (
 var _ = Describe("ServiceBinding controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
-	instanceName := "test-instance"
 	namespace := "test-namespace"
-	bindingName := "test-binding-" + uuid.New().String()
 
 	var createdInstance *v1alpha1.ServiceInstance
 	var createdBinding *v1alpha1.ServiceBinding
+	var instanceName string
+	var bindingName string
 
 	newBinding := func(name, namespace string) *v1alpha1.ServiceBinding {
 		return &v1alpha1.ServiceBinding{
@@ -154,9 +154,27 @@ var _ = Describe("ServiceBinding controller", func() {
 	})
 
 	BeforeEach(func() {
+		guid := uuid.New().String()
+		instanceName = "test-instance-" + guid
+		bindingName = "test-binding-" + guid
 		fakeClient = &smclientfakes.FakeClient{}
 		fakeClient.ProvisionReturns("12345678", "", nil)
 		fakeClient.BindReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, Credentials: json.RawMessage("{\"secret_key\": \"secret_value\"}")}, "", nil)
+		fakeClient.ListBindingsReturnsOnCall(0, nil, nil)
+		fakeClient.ListBindingsReturnsOnCall(1, &smclientTypes.ServiceBindings{
+			ServiceBindings: []smclientTypes.ServiceBinding{
+				{
+					ID:          fakeBindingID,
+					Name:        "fake-binding-external-name",
+					Credentials: json.RawMessage("{\"secret_key\": \"secret_value\"}"),
+					LastOperation: &smTypes.Operation{
+						Type:        smTypes.CREATE,
+						State:       smTypes.SUCCEEDED,
+						Description: "fake-description",
+					},
+				},
+			},
+		}, nil)
 	})
 
 	AfterEach(func() {
@@ -167,7 +185,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
 				return apierrors.IsNotFound(err)
-			}, timeout, interval).Should(BeTrue())
+			}, timeout*2, interval).Should(BeTrue())
 			if len(secretName) > 0 {
 				Eventually(func() bool {
 					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: namespace}, &v1.Secret{})
@@ -373,8 +391,8 @@ var _ = Describe("ServiceBinding controller", func() {
 				}
 
 				When("binding exists in SM", func() {
-					BeforeEach(func() {
-						fakeClient.ListBindingsReturns(
+					JustBeforeEach(func() {
+						fakeClient.ListBindingsReturnsOnCall(0,
 							&smclientTypes.ServiceBindings{
 								ServiceBindings: []smclientTypes.ServiceBinding{*fakeBinding(testCase.lastOpState)},
 							}, nil)

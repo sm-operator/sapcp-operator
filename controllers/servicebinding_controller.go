@@ -244,7 +244,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
 		log.Error(err, "failed to create secret")
 		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
