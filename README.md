@@ -10,24 +10,25 @@
 - helm
 
 ## Setup
-`kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml`
-
+1. install [cert-manager](https://cert-manager.io/docs/installation/kubernetes)</br>
+`kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml` </br>
+2. create service manager secret</br>
 `kubectl create secret generic sapcp-operator-secret --from-literal=clientid="< clientid >" --from-literal=clientsecret="< secret >" --from-literal=url="< sm_url >" --from-literal=subdomain="< subdomain >" --namespace=sapcp-operator-system` </br>
 e.g.</br>
-`kubectl create secret generic sapcp-operator-secret --from-literal=clientid="myclient" --from-literal=clientsecret="mysecret" --from-literal=url="https://service-manager.cfapps.sap.hana.ondemand.com" --from-literal=subdomain="MyDemoSubaccount0909" --namespace=sapcp-operator-system`
-
+`kubectl create secret generic sapcp-operator-secret --from-literal=clientid="myclient" --from-literal=clientsecret="mysecret" --from-literal=url="https://service-manager.cfapps.sap.hana.ondemand.com" --from-literal=subdomain="MyDemoSubaccount0909" --namespace=sapcp-operator-system` </br>
+3. deploy sapcp operator on cluster</br>
 `helm install test https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz` </br>
-sapcp-operator [releases]: https://github.com/sm-operator/sapcp-operator/releases
+sapcp-operator [releases](https://github.com/sm-operator/sapcp-operator/releases)
 
 
 ## Local setup
-`./hack/install-kubebuilder.sh` </br>
-`./hack/kind-with-registry.sh` </br>
+### Create kind with local docker registry
+`./hack/kind-with-registry.sh`
 
-### run tests
+### Run tests
 `make test`
 
-### run locally
+### Deploy locally
 `make docker-build` </br>
 `docker tag controller:latest localhost:5000/controller:latest` </br>
 `docker push localhost:5000/controller:latest` </br>
