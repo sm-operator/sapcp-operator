@@ -99,6 +99,10 @@ func (in *ServiceInstance) GetControllerName() string {
 	return "ServiceInstance"
 }
 
+func (in *ServiceInstance) GetParameters() *runtime.RawExtension {
+	return in.Spec.Parameters
+}
+
 // +kubebuilder:object:root=true
 
 // ServiceInstanceList contains a list of ServiceInstance

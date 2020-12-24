@@ -89,16 +89,20 @@ type ServiceBinding struct {
 	Status ServiceBindingStatus `json:"status,omitempty"`
 }
 
-func (in *ServiceBinding) GetConditions() []*Condition {
-	return in.Status.Conditions
+func (sb *ServiceBinding) GetConditions() []*Condition {
+	return sb.Status.Conditions
 }
 
-func (in *ServiceBinding) SetConditions(conditions []*Condition) {
-	in.Status.Conditions = conditions
+func (sb *ServiceBinding) SetConditions(conditions []*Condition) {
+	sb.Status.Conditions = conditions
 }
 
-func (in *ServiceBinding) GetControllerName() string {
+func (sb *ServiceBinding) GetControllerName() string {
 	return "ServiceBinding"
+}
+
+func (sb *ServiceBinding) GetParameters() *runtime.RawExtension {
+	return sb.Spec.Parameters
 }
 
 // +kubebuilder:object:root=true

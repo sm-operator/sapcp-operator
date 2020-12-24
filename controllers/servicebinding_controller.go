@@ -18,23 +18,18 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/sm-operator/sapcp-operator/internal/secrets"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,12 +41,7 @@ const bindingFinalizerName string = "storage.finalizers.peripli.io.service-manag
 
 // ServiceBindingReconciler reconciles a ServiceBinding object
 type ServiceBindingReconciler struct {
-	client.Client
-	Log            logr.Logger
-	Scheme         *runtime.Scheme
-	SMClient       func() smclient.Client
-	Config         config.Config
-	SecretResolver *secrets.SecretResolver
+	*BaseReconciler
 }
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=servicebindings,verbs=get;list;watch;create;update;patch;delete
@@ -64,8 +54,6 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	ctx := context.Background()
 	// TODO optimize log - use withValue where possible
 	log := r.Log.WithValues("servicebinding", req.NamespacedName)
-
-	// your logic here
 
 	serviceBinding := &v1alpha1.ServiceBinding{}
 	if err := r.Get(ctx, req.NamespacedName, serviceBinding); err != nil {
@@ -80,213 +68,19 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
-		log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
-		if err != nil {
-			setFailureConditions(serviceBinding.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, err
-		}
-
-		status, err := smClient.Status(serviceBinding.Status.OperationURL, nil)
-		if err != nil {
-			log.Error(err, "failed to fetch operation", "operationURL", serviceBinding.Status.OperationURL)
-			if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-				log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceBinding.Status.OperationURL))
-				smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
-				if err != nil {
-					log.Error(err, fmt.Sprintf("unable to get binding with id %s from SM", serviceBinding.Status.BindingID))
-					return ctrl.Result{}, err
-				}
-				r.resyncBindingStatus(serviceBinding, smBinding, serviceBinding.Status.InstanceID)
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					log.Error(err, "unable to update ServiceBinding status")
-					return ctrl.Result{}, err
-				}
-			}
-			return ctrl.Result{}, nil
-		}
-
-		switch status.State {
-		case string(smTypes.IN_PROGRESS):
-			fallthrough
-		case string(smTypes.PENDING):
-			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-		case string(smTypes.FAILED):
-			setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceBinding)
-			if serviceBinding.Status.OperationType == smTypes.DELETE {
-				serviceBinding.Status.OperationURL = ""
-				serviceBinding.Status.OperationType = ""
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					log.Error(err, "unable to update ServiceBinding status")
-					return ctrl.Result{}, err
-				}
-				errMsg := "Async unbind operation failed"
-				if status.Errors != nil {
-					errMsg = fmt.Sprintf("Async unbind operation failed, errors: %s", string(status.Errors))
-				}
-				return ctrl.Result{}, fmt.Errorf(errMsg)
-			}
-		case string(smTypes.SUCCEEDED):
-
-			if serviceBinding.Status.OperationType == smTypes.CREATE {
-				smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
-				if err != nil {
-					log.Error(err, "Failed to get binding from SM")
-				}
-
-				if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-					setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-					return ctrl.Result{}, nil
-				}
-			}
-
-			setSuccessConditions(smTypes.OperationCategory(status.Type), serviceBinding)
-			if serviceBinding.Status.OperationType == smTypes.DELETE {
-				// delete was successful - delete the secret
-				// TODO extract deletion of the secert and removal of finalizer to common function
-				if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-					return ctrl.Result{}, err
-				}
-				if !serviceBinding.DeletionTimestamp.IsZero() {
-					//if binding is being deleted, remove our finalizer
-					if err = r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-						return ctrl.Result{}, err
-					}
-				}
-
-			}
-		}
-
-		serviceBinding.Status.OperationURL = ""
-		serviceBinding.Status.OperationType = ""
-
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
-			log.Error(err, "unable to update ServiceBinding status")
-			return ctrl.Result{}, err
-		}
+		return r.poll(ctx, serviceBinding, log)
 	}
 
 	if isDelete(serviceBinding.ObjectMeta) {
-		if containsString(serviceBinding.Finalizers, bindingFinalizerName) {
-			if len(serviceBinding.Status.BindingID) == 0 {
-				// make sure there's no secret stored for the binding
-				if err := r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				log.Info("Binding does not exists in SM, removing finalizer")
-				if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-					log.Error(err, "failed to remove finalizer")
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, nil
-			}
-
-			// our finalizer is present, so we need to delete the binding in SM
-			smClient, err := r.getSMClient(ctx, log, serviceBinding)
-			if err != nil {
-				setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					log.Error(err, "unable to update ServiceBinding status")
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, err
-			}
-
-			log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
-			operationURL, err := smClient.Unbind(serviceBinding.Status.BindingID, nil)
-			if err != nil {
-				smError, ok := err.(*smclient.ServiceManagerError)
-				if ok {
-					if smError.StatusCode == http.StatusNotFound {
-						log.Info(fmt.Sprintf("Binding id %s not found in SM", serviceBinding.Status.BindingID))
-						//if not found it means success
-						serviceBinding.Status.BindingID = ""
-						setSuccessConditions(smTypes.DELETE, serviceBinding)
-						if err := r.Status().Update(ctx, serviceBinding); err != nil {
-							return ctrl.Result{}, err
-						}
-
-						// delete binding secret if exist
-						if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-							return ctrl.Result{}, err
-						}
-
-						// remove our finalizer from the list and update it.
-						if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-							log.Error(err, "failed to remove finalizer")
-							return ctrl.Result{}, err
-						}
-
-						// Stop reconciliation as the item is deleted
-						return ctrl.Result{}, nil
-					} else if smError.StatusCode == http.StatusTooManyRequests {
-						setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceBinding)
-						if err := r.Update(ctx, serviceBinding); err != nil {
-							log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
-						}
-						return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
-					}
-				}
-
-				log.Error(err, "failed to delete binding")
-				// if fail to delete the binding in SM, return with error
-				// so that it can be retried
-				if setFailureConditions(smTypes.DELETE, err.Error(), serviceBinding) {
-					if err := r.Status().Update(ctx, serviceBinding); err != nil {
-						return ctrl.Result{}, err
-					}
-				}
-
-				return ctrl.Result{}, err
-			}
-
-			if operationURL != "" {
-				log.Info("Deleting binding async")
-				serviceBinding.Status.OperationURL = operationURL
-				serviceBinding.Status.OperationType = smTypes.DELETE
-				setInProgressCondition(smTypes.DELETE, "", serviceBinding)
-
-				if err := r.Status().Update(ctx, serviceBinding); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-			}
-
-			log.Info("Binding was deleted successfully")
-			serviceBinding.Status.BindingID = ""
-			setSuccessConditions(smTypes.DELETE, serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			// remove our finalizer from the list and update it.
-			if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
-				log.Error(err, "failed to remove finalizer")
-				return ctrl.Result{}, err
-			}
-
-			// Stop reconciliation as the item is being deleted
-			return ctrl.Result{}, nil
-		}
-	} else {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !containsString(serviceBinding.ObjectMeta.Finalizers, bindingFinalizerName) {
-			log.Info("Binding has no finalizer, adding it...")
-			if err := r.addFinalizer(ctx, serviceBinding); err != nil {
-				return ctrl.Result{}, err
-			}
+		return r.delete(ctx, serviceBinding, log)
+	}
+	// The object is not being deleted, so if it does not have our finalizer,
+	// then lets add the finalizer and update the object. This is equivalent
+	// registering our finalizer.
+	if !containsString(serviceBinding.ObjectMeta.Finalizers, bindingFinalizerName) {
+		log.Info("Binding has no finalizer, adding it...")
+		if err := r.addFinalizer(ctx, serviceBinding); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -297,14 +91,12 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.Status.ObservedGeneration))
 
-	operationType := smTypes.CREATE
-
 	log.Info("service instance name " + serviceBinding.Spec.ServiceInstanceName + " binding namespace " + serviceBinding.Namespace)
 	serviceInstance, err := r.getServiceInstanceForBinding(ctx, serviceBinding)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Unable to find referenced service instance with k8s name %s", serviceBinding.Spec.ServiceInstanceName))
 
-		setFailureConditions(operationType,
+		setFailureConditions(smTypes.CREATE,
 			fmt.Sprintf("Unable to find referenced service instance with k8s name %s in namespace %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Namespace),
 			serviceBinding)
 		if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -317,7 +109,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if serviceInProgress(serviceInstance) {
 		log.Info(fmt.Sprintf("Service instance with k8s name %s is not ready for binding yet", serviceInstance.Name))
 
-		setInProgressCondition(operationType,
+		setInProgressCondition(smTypes.CREATE,
 			fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
 			serviceBinding)
 		if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -331,7 +123,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
 
-		updated := setFailureConditions(operationType, err.Error(), serviceBinding)
+		updated := setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
 		if updated {
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
 				return ctrl.Result{}, err
@@ -341,9 +133,7 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	if serviceBinding.Status.BindingID == "" {
-		log.Info("Binding ID is empty, checking if exist in SM")
-
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
@@ -352,41 +142,26 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			}
 			return ctrl.Result{}, err
 		}
-		parameters := smclient.Parameters{
-			FieldQuery: []string{
-				fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName),
-				fmt.Sprintf("service_instance_id eq '%s'", serviceInstance.Status.InstanceID)},
-			LabelQuery: []string{
-				fmt.Sprintf("_clusterid eq '%s'", r.Config.ClusterID),
-				fmt.Sprintf("_namespace eq '%s'", serviceBinding.Namespace),
-				fmt.Sprintf("_k8sname eq '%s'", serviceBinding.Name)},
-			GeneralParams: []string{"attach_last_operations=true"},
-		}
-
-		bindings, err := smClient.ListBindings(&parameters)
+		binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
 		if err != nil {
-			log.Error(err, "failed to list bindings in SM")
-			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
+			log.Error(err, "failed to list bindings from SM")
 		}
-		if bindings != nil && len(bindings.ServiceBindings) == 1 {
-
+		if binding != nil {
 			// Recovery - restore binding from SM
-
-			smBinding := &bindings.ServiceBindings[0]
-			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", smBinding.ID))
+			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", binding.ID))
 			if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
 				return ctrl.Result{}, err
 			}
 
-			if smBinding.LastOperation.Type != smTypes.CREATE || smBinding.LastOperation.State == smTypes.SUCCEEDED {
+			if binding.LastOperation.Type != smTypes.CREATE || binding.LastOperation.State == smTypes.SUCCEEDED {
 				// store secret unless binding is still being created or failed during creation
-				if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-					setFailureConditions(smBinding.LastOperation.Type, err.Error(), serviceBinding)
+				if err := r.storeBindingSecret(ctx, serviceBinding, binding, log); err != nil {
+					setFailureConditions(binding.LastOperation.Type, err.Error(), serviceBinding)
 					return ctrl.Result{}, err
 				}
 			}
 
-			r.resyncBindingStatus(serviceBinding, smBinding, serviceInstance.Status.InstanceID)
+			r.resyncBindingStatus(serviceBinding, binding, serviceInstance.Status.InstanceID)
 			if err := r.Status().Update(ctx, serviceBinding); err != nil {
 				log.Error(err, "unable to update ServiceBinding status")
 				return ctrl.Result{}, err
@@ -395,92 +170,290 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("Creating smBinding in SM")
-		labels := make(map[string][]string, 3)
+		return r.createBinding(ctx, smClient, serviceInstance, serviceBinding, log)
+	}
 
-		// add labels that can be used to construct OSB context in SM
-		labels["_namespace"] = []string{serviceInstance.Namespace}
-		labels["_k8sname"] = []string{serviceBinding.Name}
-		labels["_clusterid"] = []string{r.Config.ClusterID}
+	log.Error(fmt.Errorf("update binding is not allowed, this line should not be reached"), "")
+	return ctrl.Result{}, nil
+}
 
-		bindingParameters, err := getBindingParameters(serviceBinding)
-		if err != nil {
-			log.Error(err, "failed to parse smBinding parameters")
+func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient smclient.Client, serviceInstance *v1alpha1.ServiceInstance, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
+	log.Info("Creating smBinding in SM")
+	labels := make(map[string][]string, 3)
+
+	// add labels that can be used to construct OSB context in SM
+	labels[namespaceLabel] = []string{serviceInstance.Namespace}
+	labels[k8sNameLabel] = []string{serviceBinding.Name}
+	labels[clusterIDLabel] = []string{r.Config.ClusterID}
+
+	bindingParameters, err := getParameters(serviceBinding)
+	if err != nil {
+		log.Error(err, "failed to parse smBinding parameters")
+		return ctrl.Result{}, err
+	}
+
+	smBinding, operationURL, err := smClient.Bind(&smclientTypes.ServiceBinding{
+		Name:              serviceBinding.Spec.ExternalName,
+		Labels:            labels,
+		ServiceInstanceID: serviceInstance.Status.InstanceID,
+		Parameters:        bindingParameters,
+	}, nil)
+
+	serviceBinding.Status.InstanceID = serviceInstance.Status.InstanceID
+	log.Info(fmt.Sprintf("Updating observed generation (%v) to generation (%v)", serviceBinding.Status.ObservedGeneration, serviceBinding.Generation))
+	serviceBinding.Status.ObservedGeneration = serviceBinding.Generation
+
+	if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
+		setFailureConditions(smTypes.CREATE, "", serviceBinding)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, err
+	}
 
-		smBinding, operationURL, err := smClient.Bind(&smclientTypes.ServiceBinding{
-			Name:              serviceBinding.Spec.ExternalName,
-			Labels:            labels,
-			ServiceInstanceID: serviceInstance.Status.InstanceID,
-			Parameters:        bindingParameters,
-		}, nil)
-
-		serviceBinding.Status.InstanceID = serviceInstance.Status.InstanceID
-		log.Info(fmt.Sprintf("Updating observed generation (%v) to generation (%v)", serviceBinding.Status.ObservedGeneration, serviceBinding.Generation))
-		serviceBinding.Status.ObservedGeneration = serviceBinding.Generation
-
-		if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
-			setFailureConditions(smTypes.CREATE, "", serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, err
-		}
-
-		if err != nil {
-			log.Error(err, "failed to create smBinding", "serviceInstanceID", serviceInstance.Status.InstanceID)
-			setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, err
-		}
-
-		if operationURL != "" {
-			log.Info("Create smBinding request is async")
-			serviceBinding.Status.OperationURL = operationURL
-			serviceBinding.Status.OperationType = smTypes.CREATE
-			setInProgressCondition(smTypes.CREATE, "", serviceBinding)
-			serviceBinding.Status.BindingID = smclient.ExtractBindingID(operationURL)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-			if serviceBinding.Status.BindingID == "" {
-				return ctrl.Result{}, fmt.Errorf("failed to extract smBinding ID from operation URL %s", operationURL)
-			}
-
-			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
-		}
-
-		log.Info("Binding created successfully")
-
-		if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-			log.Error(err, "failed to create secret")
-			setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, err
-		}
-
-		setSuccessConditions(smTypes.CREATE, serviceBinding)
-		serviceBinding.Status.BindingID = smBinding.ID
-		log.Info("Updating binding", "bindingID", smBinding.ID)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+	if err != nil {
+		log.Error(err, "failed to create smBinding", "serviceInstanceID", serviceInstance.Status.InstanceID)
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
+	}
+
+	if operationURL != "" {
+		log.Info("Create smBinding request is async")
+		serviceBinding.Status.OperationURL = operationURL
+		serviceBinding.Status.OperationType = smTypes.CREATE
+		setInProgressCondition(smTypes.CREATE, "", serviceBinding)
+		serviceBinding.Status.BindingID = smclient.ExtractBindingID(operationURL)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
+			return ctrl.Result{}, err
+		}
+		if serviceBinding.Status.BindingID == "" {
+			return ctrl.Result{}, fmt.Errorf("failed to extract smBinding ID from operation URL %s", operationURL)
+		}
+
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+	}
+
+	log.Info("Binding created successfully")
+
+	if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
+		log.Error(err, "failed to create secret")
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
+	setSuccessConditions(smTypes.CREATE, serviceBinding)
+	serviceBinding.Status.BindingID = smBinding.ID
+	log.Info("Updating binding", "bindingID", smBinding.ID)
+	if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
+	if containsString(serviceBinding.Finalizers, bindingFinalizerName) {
+		if len(serviceBinding.Status.BindingID) == 0 {
+			// make sure there's no secret stored for the binding
+			if err := r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Binding does not exists in SM, removing finalizer")
+			if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
+		// our finalizer is present, so we need to delete the binding in SM
+		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
+		if err != nil {
+			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "unable to update ServiceBinding status")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+
+		log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
+		operationURL, err := smClient.Unbind(serviceBinding.Status.BindingID, nil)
+		if err != nil {
+			smError, ok := err.(*smclient.ServiceManagerError)
+			if ok {
+				if smError.StatusCode == http.StatusNotFound || smError.StatusCode == http.StatusGone {
+					log.Info(fmt.Sprintf("Binding id %s not found in SM", serviceBinding.Status.BindingID))
+					//if not found it means success
+					serviceBinding.Status.BindingID = ""
+					setSuccessConditions(smTypes.DELETE, serviceBinding)
+					if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+						return ctrl.Result{}, err
+					}
+
+					// delete binding secret if exist
+					if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+						return ctrl.Result{}, err
+					}
+
+					// remove our finalizer from the list and update it.
+					if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+						log.Error(err, "failed to remove finalizer")
+						return ctrl.Result{}, err
+					}
+
+					// Stop reconciliation as the item is deleted
+					return ctrl.Result{}, nil
+				} else if smError.StatusCode == http.StatusTooManyRequests {
+					setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceBinding)
+					if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+						log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
+					}
+					return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
+				}
+			}
+
+			log.Error(err, "failed to delete binding")
+			// if fail to delete the binding in SM, return with error
+			// so that it can be retried
+			if setFailureConditions(smTypes.DELETE, err.Error(), serviceBinding) {
+				if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			return ctrl.Result{}, err
+		}
+
+		if operationURL != "" {
+			log.Info("Deleting binding async")
+			serviceBinding.Status.OperationURL = operationURL
+			serviceBinding.Status.OperationType = smTypes.DELETE
+			setInProgressCondition(smTypes.DELETE, "", serviceBinding)
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+		}
+
+		log.Info("Binding was deleted successfully")
+		serviceBinding.Status.BindingID = ""
+		setSuccessConditions(smTypes.DELETE, serviceBinding)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// remove our finalizer from the list and update it.
+		if err := r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+			log.Error(err, "failed to remove finalizer")
+			return ctrl.Result{}, err
+		}
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
+	log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
+	smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
+	if err != nil {
+		setFailureConditions(serviceBinding.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			log.Error(err, "unable to update ServiceBinding status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
+	status, err := smClient.Status(serviceBinding.Status.OperationURL, nil)
+	if err != nil {
+		log.Error(err, "failed to fetch operation", "operationURL", serviceBinding.Status.OperationURL)
+		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
+			log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceBinding.Status.OperationURL))
+			smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
+			if err != nil {
+				log.Error(err, fmt.Sprintf("unable to get binding with id %s from SM", serviceBinding.Status.BindingID))
+				return ctrl.Result{}, err
+			}
+			r.resyncBindingStatus(serviceBinding, smBinding, serviceBinding.Status.InstanceID)
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "unable to update ServiceBinding status")
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	switch status.State {
+	case string(smTypes.IN_PROGRESS):
+		fallthrough
+	case string(smTypes.PENDING):
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+	case string(smTypes.FAILED):
+		setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceBinding)
+		if serviceBinding.Status.OperationType == smTypes.DELETE {
+			serviceBinding.Status.OperationURL = ""
+			serviceBinding.Status.OperationType = ""
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+				log.Error(err, "unable to update ServiceBinding status")
+				return ctrl.Result{}, err
+			}
+			errMsg := "Async unbind operation failed"
+			if status.Errors != nil {
+				errMsg = fmt.Sprintf("Async unbind operation failed, errors: %s", string(status.Errors))
+			}
+			return ctrl.Result{}, fmt.Errorf(errMsg)
+		}
+	case string(smTypes.SUCCEEDED):
+
+		if serviceBinding.Status.OperationType == smTypes.CREATE {
+			smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
+			if err != nil {
+				log.Error(err, "Failed to get binding from SM")
+			}
+
+			if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
+				setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
+				return ctrl.Result{}, nil
+			}
+		}
+
+		setSuccessConditions(smTypes.OperationCategory(status.Type), serviceBinding)
+		if serviceBinding.Status.OperationType == smTypes.DELETE {
+			// delete was successful - delete the secret
+			// TODO extract deletion of the secert and removal of finalizer to common function
+			if err = r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
+			}
+			if !serviceBinding.DeletionTimestamp.IsZero() {
+				//if binding is being deleted, remove our finalizer
+				if err = r.removeFinalizer(ctx, serviceBinding, log); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+	}
+
+	serviceBinding.Status.OperationURL = ""
+	serviceBinding.Status.OperationType = ""
+
+	err = r.updateStatus(ctx, serviceBinding, log)
+	return ctrl.Result{}, err
 }
 
 func (r *ServiceBindingReconciler) SetOwner(ctx context.Context, serviceInstance *v1alpha1.ServiceInstance, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) error {
@@ -552,19 +525,6 @@ func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *ServiceBindingReconciler) getSMClient(ctx context.Context, log logr.Logger, binding *v1alpha1.ServiceBinding) (smclient.Client, error) {
-	if r.SMClient != nil {
-		return r.SMClient(), nil
-	}
-
-	secret, err := r.SecretResolver.GetSecretForResource(ctx, binding)
-	if err != nil {
-		return nil, err
-	}
-
-	return getSMClient(ctx, secret, log)
-}
-
 func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
 	log.Info("removing finalizer")
 	binding.Finalizers = removeString(binding.Finalizers, bindingFinalizerName)
@@ -593,7 +553,7 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.Serv
 	case smTypes.PENDING:
 		fallthrough
 	case smTypes.IN_PROGRESS:
-		k8sBinding.Status.OperationURL = buildOperationURL(smBinding.LastOperation.ID, smBinding.ID, web.ServiceBindingsURL)
+		k8sBinding.Status.OperationURL = smclient.BuildOperationURL(smBinding.LastOperation.ID, smBinding.ID, web.ServiceBindingsURL)
 		k8sBinding.Status.OperationType = smBinding.LastOperation.Type
 		setInProgressCondition(smBinding.LastOperation.Type, smBinding.LastOperation.Description, k8sBinding)
 	case smTypes.SUCCEEDED:
@@ -667,14 +627,45 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 	return nil
 }
 
-func getBindingParameters(binding *v1alpha1.ServiceBinding) (json.RawMessage, error) {
-	var instanceParameters json.RawMessage
-	if binding.Spec.Parameters != nil {
-		parametersJSON, err := binding.Spec.Parameters.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		instanceParameters = parametersJSON
+func (r *ServiceBindingReconciler) getBindingForRecovery(smClient smclient.Client, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (*smclientTypes.ServiceBinding, error) {
+	parameters := smclient.Parameters{
+		FieldQuery: []string{
+			fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName)},
+		LabelQuery: []string{
+			fmt.Sprintf("%s eq '%s'", clusterIDLabel, r.Config.ClusterID),
+			fmt.Sprintf("%s eq '%s'", namespaceLabel, serviceBinding.Namespace),
+			fmt.Sprintf("%s eq '%s'", k8sNameLabel, serviceBinding.Name)},
+		GeneralParams: []string{"attach_last_operations=true"},
 	}
-	return instanceParameters, nil
+
+	bindings, err := smClient.ListBindings(&parameters)
+	if err != nil {
+		log.Error(err, "failed to list bindings in SM")
+		return nil, err
+	}
+	if bindings != nil && len(bindings.ServiceBindings) == 1 {
+		return &bindings.ServiceBindings[0], nil
+	}
+
+	return nil, nil
+}
+
+func (r *ServiceBindingReconciler) updateStatus(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) error {
+	log.Info("updating service binding status")
+	if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		status := serviceBinding.Status
+		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest binding and trying again", err.Error()))
+		if err := r.Get(ctx, types.NamespacedName{Name: serviceBinding.Name, Namespace: serviceBinding.Namespace}, serviceBinding); err != nil {
+			log.Error(err, "failed to fetch latest binding")
+			return err
+		}
+
+		serviceBinding.Status = status
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			log.Error(err, "unable to update service binding status")
+			return err
+		}
+	}
+	log.Info("updated service binding status in k8s")
+	return nil
 }

@@ -449,3 +449,7 @@ func ExtractBindingID(operationURL string) string {
 	}
 	return ""
 }
+
+func BuildOperationURL(operationID, resourceID, resourceURL string) string {
+	return fmt.Sprintf("%s/%s%s/%s", resourceURL, resourceID, web.ResourceOperationsURL, operationID)
+}
