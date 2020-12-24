@@ -93,4 +93,4 @@ lint-deps:
 	fi
 
 helm-charts:
-	kustomize build config/default > sapcp-operator-charts/templates/sap-operator.yml
+	kustomize build config/default > ./sapcp-operator-charts/templates/sap-operator.yml

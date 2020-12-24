@@ -22,19 +22,21 @@ jobs:
           repository: sm-operator/sapcp-operator/controller
           tag_with_ref: true
 
-      - name: Install helm
-        uses: azure/setup-helm@v1
-        with:
-          version: v3.4.0
-
       - name: Install kustomize
         uses: imranismail/setup-kustomize@v1
         with:
           kustomize-version: 3.1.0
 
+      - name: Prepare SAPCP Operator charts
+        run: make helm-charts
+
+      - name: Install helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.4.0
+
       - name: Run chart-releaser
         run: |
-          make helm-charts
           sed -i -e 's/tag: master/tag: '${TAG_NAME:-master}'/g' ./sapcp-operator-charts/values.yaml | sh
           mkdir out
           helm package --app-version ${TAG_NAME} --version ${TAG_NAME} -d ./out sapcp-operator-charts
