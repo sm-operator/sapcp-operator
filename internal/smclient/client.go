@@ -46,7 +46,7 @@ type Client interface {
 
 	ListInstances(*Parameters) (*types.ServiceInstances, error)
 	GetInstanceByID(string, *Parameters) (*types.ServiceInstance, error)
-	UpdateInstance(string, *types.ServiceInstanceUpdate, *Parameters) (*types.ServiceInstance, string, error)
+	UpdateInstance(id string, updatedInstance *types.ServiceInstanceUpdate, serviceName string, planName string, q *Parameters) (*types.ServiceInstance, string, error)
 	Provision(*types.ServiceInstance, string, string, *Parameters) (string, string, error)
 	Deprovision(string, *Parameters) (string, error)
 
@@ -168,7 +168,7 @@ func (client *serviceManagerClient) Provision(instance *types.ServiceInstance, s
 		return "", "", fmt.Errorf("service name and plan name must be not empty for instance %s", instance.Name)
 	}
 
-	planID, err := client.getPlanID(instance, serviceName, planName)
+	planID, err := client.getAndValidatePlanID(instance.ServicePlanID, serviceName, planName)
 	if err != nil {
 		return "", "", err
 	}
@@ -250,8 +250,14 @@ func (client *serviceManagerClient) Unbind(id string, q *Parameters) (string, er
 	return client.delete(web.ServiceBindingsURL+"/"+id, q)
 }
 
-func (client *serviceManagerClient) UpdateInstance(id string, updatedInstance *types.ServiceInstanceUpdate, q *Parameters) (*types.ServiceInstance, string, error) {
+func (client *serviceManagerClient) UpdateInstance(id string, updatedInstance *types.ServiceInstanceUpdate, serviceName string, planName string, q *Parameters) (*types.ServiceInstance, string, error) {
 	var result *types.ServiceInstance
+
+	planID, err := client.getAndValidatePlanID(updatedInstance.ServicePlanID, serviceName, planName)
+	if err != nil {
+		return nil, "", err
+	}
+	updatedInstance.ServicePlanID = planID
 	location, err := client.update(updatedInstance, web.ServiceInstancesURL, id, q, &result)
 	if err != nil {
 		return nil, "", err
@@ -374,7 +380,7 @@ func (client *serviceManagerClient) Call(method string, smpath string, body io.R
 	return resp, nil
 }
 
-func (client *serviceManagerClient) getPlanID(instance *types.ServiceInstance, serviceName string, planName string) (string, error) {
+func (client *serviceManagerClient) getAndValidatePlanID(planID string, serviceName string, planName string) (string, error) {
 	query := &Parameters{
 		FieldQuery: []string{fmt.Sprintf("catalog_name eq '%s'", serviceName)},
 	}
@@ -404,18 +410,18 @@ func (client *serviceManagerClient) getPlanID(instance *types.ServiceInstance, s
 	}
 	if len(plans.ServicePlans) == 0 {
 		return "", fmt.Errorf("service plan %s not found for service offering %s", planName, serviceName)
-	} else if len(plans.ServicePlans) == 1 && len(instance.ServicePlanID) == 0 {
+	} else if len(plans.ServicePlans) == 1 && len(planID) == 0 {
 		return plans.ServicePlans[0].ID, nil
 	} else {
 		for _, plan := range plans.ServicePlans {
-			if plan.ID == instance.ServicePlanID {
+			if plan.ID == planID {
 				return plan.ID, nil
 			}
 		}
 	}
 
-	if len(instance.ServicePlanID) > 0 {
-		err = fmt.Errorf("provided plan ID %s does not match the provided offering name %s and plan name %s", instance.ServicePlanID, serviceName, planName)
+	if len(planID) > 0 {
+		err = fmt.Errorf("provided plan ID %s does not match the provided offering name %s and plan name %s", planID, serviceName, planName)
 	} else {
 		err = fmt.Errorf("ambeguity error, found more than one resource matching the provided offering name %s and plan name %s, provide the desired servicePlanID", serviceName, planName)
 	}
