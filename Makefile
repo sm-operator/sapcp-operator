@@ -91,3 +91,6 @@ lint-deps:
 	@if ! which golangci-lint >/dev/null || [[ "$$(golangci-lint --version)" != *${LINT_VERSION}* ]]; then \
 		curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin v${LINT_VERSION}; \
 	fi
+
+helm-charts:
+	kustomize build config/default > ./sapcp-operator-charts/templates/sap-operator.yml

@@ -1,15 +1,19 @@
-name: Publish Docker image
+name: Release SAPCP Operator
 on:
   release:
     types: [published]
 jobs:
-  push_to_registry:
-    name: Push Docker image to GitHub Packages
+  release:
+    name: Release SAPCP Operator
     runs-on: ubuntu-latest
+    env:
+      TAG_NAME: ${{ github.event.release.tag_name }}
+      CHART_URL: https://github.com/sm-operator/sapcp-operator/releases/download/${{ github.event.release.tag_name }}/sapcp-operator-${{ github.event.release.tag_name }}.tgz
     steps:
       - name: Check out the repo
         uses: actions/checkout@v2
-      - name: Push to GitHub Packages
+
+      - name: Push Image to GitHub Packages
         uses: docker/build-push-action@v1
         with:
           username: ${{ secrets.OPERATOR_USER }}
@@ -17,3 +21,33 @@ jobs:
           registry: ghcr.io
           repository: sm-operator/sapcp-operator/controller
           tag_with_ref: true
+
+      - name: Install kustomize
+        uses: imranismail/setup-kustomize@v1
+        with:
+          kustomize-version: 3.1.0
+
+      - name: Prepare SAPCP Operator charts
+        run: make helm-charts
+
+      - name: Install helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.4.0
+
+      - name: Run chart-releaser
+        run: |
+          sed -i -e 's/tag: master/tag: '${TAG_NAME:-master}'/g' ./sapcp-operator-charts/values.yaml | sh
+          mkdir out
+          helm package --app-version ${TAG_NAME} --version ${TAG_NAME} -d ./out sapcp-operator-charts
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: out/*
+          tag: ${{ github.event.release.tag_name }}
+          overwrite: true
+          file_glob: true
+
+

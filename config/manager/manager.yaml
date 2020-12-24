@@ -27,7 +27,7 @@ spec:
         - /manager
         args:
         - --enable-leader-election
-        image: controller:latest
+        image: "{{.Values.manager.image.repository}}:{{.Values.manager.image.tag}}"
         imagePullPolicy: Always #TODO remove this
         name: manager
         envFrom:
