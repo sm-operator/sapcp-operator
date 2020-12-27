@@ -148,21 +148,21 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 			if isDelete(serviceInstance.ObjectMeta) {
 				_, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
 				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-					r.removeFinalizer(ctx, serviceInstance, log)
-					return ctrl.Result{}, nil
+					err := r.removeFinalizer(ctx, serviceInstance, log)
+					return ctrl.Result{}, err
 				} else {
 					serviceInstance.Status.OperationType = ""
 					serviceInstance.Status.OperationURL = ""
 					setInProgressCondition(serviceInstance.Status.OperationType, "", serviceInstance)
-					r.updateStatus(ctx, serviceInstance, log)
-					return ctrl.Result{Requeue: true}, nil
+					err := r.updateStatus(ctx, serviceInstance, log)
+					return ctrl.Result{Requeue: true}, err
 				}
 			} else {
 				setFailureConditions(serviceInstance.Status.OperationType, "operation not found", serviceInstance)
 				serviceInstance.Status.OperationType = ""
 				serviceInstance.Status.OperationURL = ""
-				r.updateStatus(ctx, serviceInstance, log)
-				return ctrl.Result{}, nil
+				err := r.updateStatus(ctx, serviceInstance, log)
+				return ctrl.Result{}, err
 			}
 		}
 		setFailureConditions(serviceInstance.Status.OperationType, err.Error(), serviceInstance)
