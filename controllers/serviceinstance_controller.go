@@ -150,13 +150,12 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 					err := r.removeFinalizer(ctx, serviceInstance, log)
 					return ctrl.Result{}, err
-				} else {
-					serviceInstance.Status.OperationType = ""
-					serviceInstance.Status.OperationURL = ""
-					setInProgressCondition(serviceInstance.Status.OperationType, "", serviceInstance)
-					err := r.updateStatus(ctx, serviceInstance, log)
-					return ctrl.Result{Requeue: true}, err
 				}
+				serviceInstance.Status.OperationType = ""
+				serviceInstance.Status.OperationURL = ""
+				setInProgressCondition(serviceInstance.Status.OperationType, "", serviceInstance)
+				err := r.updateStatus(ctx, serviceInstance, log)
+				return ctrl.Result{Requeue: true}, err
 			} else {
 				setFailureConditions(serviceInstance.Status.OperationType, "operation not found", serviceInstance)
 				serviceInstance.Status.OperationType = ""
