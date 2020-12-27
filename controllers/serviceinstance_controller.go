@@ -156,13 +156,12 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 				setInProgressCondition(serviceInstance.Status.OperationType, "", serviceInstance)
 				err := r.updateStatus(ctx, serviceInstance, log)
 				return ctrl.Result{Requeue: true}, err
-			} else {
-				setFailureConditions(serviceInstance.Status.OperationType, "operation not found", serviceInstance)
-				serviceInstance.Status.OperationType = ""
-				serviceInstance.Status.OperationURL = ""
-				err := r.updateStatus(ctx, serviceInstance, log)
-				return ctrl.Result{}, err
 			}
+			setFailureConditions(serviceInstance.Status.OperationType, "operation not found", serviceInstance)
+			serviceInstance.Status.OperationType = ""
+			serviceInstance.Status.OperationURL = ""
+			err := r.updateStatus(ctx, serviceInstance, log)
+			return ctrl.Result{}, err
 		}
 		setFailureConditions(serviceInstance.Status.OperationType, err.Error(), serviceInstance)
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
