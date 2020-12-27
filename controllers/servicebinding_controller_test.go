@@ -404,7 +404,7 @@ var _ = Describe("ServiceBinding controller", func() {
 							}, nil)
 						fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.IN_PROGRESS)}, nil)
 					})
-					AfterEach(func() {
+					JustAfterEach(func() {
 						fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.SUCCEEDED)}, nil)
 						fakeClient.GetBindingByIDReturns(fakeBinding(smTypes.SUCCEEDED), nil)
 					})
