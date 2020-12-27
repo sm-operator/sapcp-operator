@@ -78,7 +78,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			} else {
 				return len(createdBinding.Status.Conditions) > 0
 			}
-		}, timeout, interval).Should(BeTrue())
+		}, timeout*2, interval).Should(BeTrue())
 		return createdBinding, nil
 	}
 
