@@ -50,8 +50,7 @@ type ServiceBindingReconciler struct {
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
-func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// TODO optimize log - use withValue where possible
 	log := r.Log.WithValues("servicebinding", req.NamespacedName)
 

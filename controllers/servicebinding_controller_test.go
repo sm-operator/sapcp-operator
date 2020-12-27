@@ -26,13 +26,13 @@ import (
 // +kubebuilder:docs-gen:collapse=Imports
 
 const (
-	fakeBindingID = "fake-binding-id"
+	fakeBindingID        = "fake-binding-id"
+	bindingTestNamespace = "test-namespace"
 )
 
 var _ = Describe("ServiceBinding controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
-	namespace := "test-namespace"
 
 	var createdInstance *v1alpha1.ServiceInstance
 	var createdBinding *v1alpha1.ServiceBinding
@@ -150,7 +150,7 @@ var _ = Describe("ServiceBinding controller", func() {
 	}
 
 	JustBeforeEach(func() {
-		createdInstance = createInstance(context.Background(), instanceName, namespace, "", true)
+		createdInstance = createInstance(context.Background(), instanceName, bindingTestNamespace, "", true)
 	})
 
 	BeforeEach(func() {
@@ -183,12 +183,12 @@ var _ = Describe("ServiceBinding controller", func() {
 			fakeClient.UnbindReturns("", nil)
 			k8sClient.Delete(context.Background(), createdBinding)
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 				return apierrors.IsNotFound(err)
 			}, timeout*2, interval).Should(BeTrue())
 			if len(secretName) > 0 {
 				Eventually(func() bool {
-					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: namespace}, &v1.Secret{})
+					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
 					return apierrors.IsNotFound(err)
 				}, timeout, interval).Should(BeTrue())
 			}
@@ -198,7 +198,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 		Expect(k8sClient.Delete(context.Background(), createdInstance)).To(Succeed())
 		Eventually(func() bool {
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: instanceName, Namespace: namespace}, createdInstance)
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: instanceName, Namespace: bindingTestNamespace}, createdInstance)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					return true
@@ -215,21 +215,27 @@ var _ = Describe("ServiceBinding controller", func() {
 		Context("Invalid parameters", func() {
 			When("service instance name is not provided", func() {
 				It("should fail", func() {
-					createBindingWithError(context.Background(), bindingName, namespace, "", "",
+					createBindingWithError(context.Background(), bindingName, bindingTestNamespace, "", "",
 						"spec.serviceInstanceName in body should be at least 1 chars long")
 				})
 			})
 
 			When("referenced service instance does not exist", func() {
 				It("should fail", func() {
-					createBindingWithError(context.Background(), bindingName, namespace, "no-such-instance", "",
+					createBindingWithError(context.Background(), bindingName, bindingTestNamespace, "no-such-instance", "",
 						"Unable to find referenced service instance with k8s name no-such-instance")
 				})
 			})
 
 			When("referenced service instance exist in another namespace", func() {
+				var otherNamespace = "other-" + bindingTestNamespace
+				BeforeEach(func() {
+					nsSpec := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: otherNamespace}}
+					err := k8sClient.Create(context.Background(), nsSpec)
+					Expect(err).ToNot(HaveOccurred())
+				})
 				It("should fail", func() {
-					createBindingWithError(context.Background(), bindingName, "other-"+namespace, instanceName, "",
+					createBindingWithError(context.Background(), bindingName, otherNamespace, instanceName, "",
 						fmt.Sprintf("Unable to find referenced service instance with k8s name %s", instanceName))
 				})
 			})
@@ -239,7 +245,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			Context("Sync", func() {
 				It("Should create binding and store the binding credentials in a secret", func() {
 					ctx := context.Background()
-					createdBinding = createBinding(ctx, bindingName, namespace, instanceName, "binding-external-name")
+					createdBinding = createBinding(ctx, bindingName, bindingTestNamespace, instanceName, "binding-external-name")
 					Expect(createdBinding.Spec.ExternalName).To(Equal("binding-external-name"))
 
 					By("Verify binding secret created")
@@ -254,7 +260,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 
 					It("should fail with the error returned from SM", func() {
-						createBindingWithError(context.Background(), bindingName, namespace, instanceName, "binding-external-name",
+						createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
 							errorMessage)
 					})
 				})
@@ -276,7 +282,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 					It("Should create binding and store the binding credentials in a secret", func() {
 						ctx := context.Background()
-						createdBinding = createBinding(ctx, bindingName, namespace, instanceName, "")
+						createdBinding = createBinding(ctx, bindingName, bindingTestNamespace, instanceName, "")
 					})
 				})
 
@@ -292,7 +298,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 
 					It("should fail with the error returned from SM", func() {
-						createBindingWithError(context.Background(), bindingName, namespace, instanceName, "existing-name",
+						createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "existing-name",
 							errorMessage)
 					})
 				})
@@ -303,10 +309,10 @@ var _ = Describe("ServiceBinding controller", func() {
 						fakeClient.BindReturns(nil, "/v1/service_bindings/id/operations/1234", nil)
 					})
 					It("should not fail", func() {
-						createdBinding, err := createBindingWithoutAssertions(context.Background(), bindingName, namespace, instanceName, "")
+						createdBinding, err := createBindingWithoutAssertions(context.Background(), bindingName, bindingTestNamespace, instanceName, "")
 						Expect(err).ToNot(HaveOccurred())
 						Eventually(func() bool {
-							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 							if err != nil || len(createdBinding.Status.Conditions) != 1 || createdBinding.Status.Conditions[0].Reason != Created {
 								return false
 							}
@@ -318,7 +324,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 			When("external name is not provided", func() {
 				It("succeeds and uses the k8s name as external name", func() {
-					createdBinding = createBinding(context.Background(), bindingName, namespace, instanceName, "")
+					createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "")
 					Expect(createdBinding.Spec.ExternalName).To(Equal(createdBinding.Name))
 				})
 			})
@@ -331,7 +337,7 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 				It("should retry and succeed once the instance is ready", func() {
 					// verify create fail with appropriate message
-					createBindingWithError(context.Background(), bindingName, namespace, instanceName, "binding-external-name",
+					createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
 						"is not usable")
 
 					// verify creation is retired and succeeds after instance is ready
@@ -340,7 +346,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(err).ToNot(HaveOccurred())
 
 					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
 					}, syncPeriod+time.Second, interval).Should(BeTrue())
 				})
@@ -354,7 +360,7 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 				It("should retry and succeed once the instance is ready", func() {
 					var err error
-					createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, namespace, instanceName, "binding-external-name", false)
+					createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name", false)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(isInProgress(createdBinding)).To(BeTrue())
 
@@ -364,7 +370,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(err).ToNot(HaveOccurred())
 
 					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
 					}, pollInterval+time.Second, interval).Should(BeTrue())
 				})
@@ -405,7 +411,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					When(fmt.Sprintf("last operation is %s %s", testCase.lastOpType, testCase.lastOpState), func() {
 						It("should resync status", func() {
 							var err error
-							createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, namespace, instanceName, "fake-binding-external-name", false)
+							createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, bindingTestNamespace, instanceName, "fake-binding-external-name", false)
 							Expect(err).ToNot(HaveOccurred())
 							smCallArgs := fakeClient.ListBindingsArgsForCall(0)
 							Expect(smCallArgs.LabelQuery).To(HaveLen(3))
@@ -455,7 +461,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 	Context("Update", func() {
 		JustBeforeEach(func() {
-			createdBinding = createBinding(context.Background(), bindingName, namespace, instanceName, "binding-external-name")
+			createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name")
 			Expect(isReady(createdBinding)).To(BeTrue())
 		})
 
@@ -497,7 +503,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 	Context("Delete", func() {
 		JustBeforeEach(func() {
-			createdBinding = createBinding(context.Background(), bindingName, namespace, instanceName, "binding-external-name")
+			createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name")
 			Expect(isReady(createdBinding)).To(BeTrue())
 		})
 
@@ -511,9 +517,9 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(secretName).ToNot(BeEmpty())
 					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
 					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						if apierrors.IsNotFound(err) {
-							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: namespace}, &v1.Secret{})
+							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
 							return apierrors.IsNotFound(err)
 						}
 						return false
@@ -532,7 +538,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
 
 					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						if err != nil {
 							return false
 						}
@@ -545,7 +551,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(v1alpha1.ConditionTrue))
 					Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring("some-error"))
 
-					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: namespace}, &v1.Secret{})
+					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
 					Expect(err).ToNot(HaveOccurred())
 				})
 			})
@@ -566,13 +572,13 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(secretName).ToNot(BeEmpty())
 					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
 
-					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 					Expect(err).ToNot(HaveOccurred())
 
 					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						if apierrors.IsNotFound(err) {
-							err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: namespace}, &v1.Secret{})
+							err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
 							return apierrors.IsNotFound(err)
 						}
 
@@ -595,11 +601,11 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(secretName).ToNot(BeEmpty())
 					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
 
-					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 					Expect(err).ToNot(HaveOccurred())
 
 					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: namespace}, createdBinding)
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						if err != nil {
 							return false
 						}
@@ -612,7 +618,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(v1alpha1.ConditionTrue))
 					Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(errorMessage))
 
-					err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: namespace}, &v1.Secret{})
+					err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
 					Expect(err).ToNot(HaveOccurred())
 				})
 			})
