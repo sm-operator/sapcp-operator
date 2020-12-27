@@ -68,7 +68,7 @@ type ServiceBindingStatus struct {
 	OperationType types.OperationCategory `json:"operationType,omitempty"`
 
 	// Service binding conditions
-	Conditions []*Condition `json:"conditions"`
+	Conditions []metav1.Condition `json:"conditions"`
 
 	// Last generation that was acted on
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -89,11 +89,11 @@ type ServiceBinding struct {
 	Status ServiceBindingStatus `json:"status,omitempty"`
 }
 
-func (sb *ServiceBinding) GetConditions() []*Condition {
+func (sb *ServiceBinding) GetConditions() []metav1.Condition {
 	return sb.Status.Conditions
 }
 
-func (sb *ServiceBinding) SetConditions(conditions []*Condition) {
+func (sb *ServiceBinding) SetConditions(conditions []metav1.Condition) {
 	sb.Status.Conditions = conditions
 }
 

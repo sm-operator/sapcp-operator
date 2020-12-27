@@ -182,13 +182,13 @@ var _ = AfterSuite(func() {
 })
 
 func isReady(resource internal.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == v1alpha1.ConditionTrue
+	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
 }
 
 func isInProgress(resource internal.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == v1alpha1.ConditionFalse
+	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionFalse
 }
 
 func isFailed(resource internal.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == v1alpha1.ConditionTrue
+	return len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == metav1.ConditionTrue
 }

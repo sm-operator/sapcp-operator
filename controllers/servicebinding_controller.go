@@ -122,11 +122,9 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
 
-		updated := setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-		if updated {
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				return ctrl.Result{}, err
-			}
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
+		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
 	}
@@ -328,11 +326,11 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 			log.Error(err, "failed to delete binding")
 			// if fail to delete the binding in SM, return with error
 			// so that it can be retried
-			if setFailureConditions(smTypes.DELETE, err.Error(), serviceBinding) {
-				if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
-					return ctrl.Result{}, err
-				}
+			setFailureConditions(smTypes.DELETE, err.Error(), serviceBinding)
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+				return ctrl.Result{}, err
 			}
+
 			return ctrl.Result{}, err
 		}
 
@@ -498,7 +496,7 @@ func serviceNotUsable(instance *v1alpha1.ServiceInstance) bool {
 }
 
 func serviceInProgress(instance *v1alpha1.ServiceInstance) bool {
-	if instance.Status.InstanceID != "" && len(instance.Status.Conditions) == 1 && instance.Status.Conditions[0].Status == v1alpha1.ConditionFalse {
+	if instance.Status.InstanceID != "" && len(instance.Status.Conditions) == 1 && instance.Status.Conditions[0].Status == metav1.ConditionFalse {
 		// instance is in progress
 		return true
 	}

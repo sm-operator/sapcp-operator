@@ -70,7 +70,7 @@ type ServiceInstanceStatus struct {
 	OperationType types.OperationCategory `json:"operationType,omitempty"`
 
 	// Service instance conditions
-	Conditions []*Condition `json:"conditions"`
+	Conditions []metav1.Condition `json:"conditions"`
 
 	// Last generation that was acted on
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -87,11 +87,11 @@ type ServiceInstance struct {
 	Status            ServiceInstanceStatus `json:"status,omitempty"`
 }
 
-func (in *ServiceInstance) GetConditions() []*Condition {
+func (in *ServiceInstance) GetConditions() []metav1.Condition {
 	return in.Status.Conditions
 }
 
-func (in *ServiceInstance) SetConditions(conditions []*Condition) {
+func (in *ServiceInstance) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 

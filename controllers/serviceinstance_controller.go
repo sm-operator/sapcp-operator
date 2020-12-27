@@ -383,10 +383,9 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 			log.Error(err, "failed to delete instance")
 			// if fail to delete the instance in SM, return with error
 			// so that it can be retried
-			if setFailureConditions(smTypes.DELETE, err.Error(), serviceInstance) {
-				if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-					return ctrl.Result{}, err
-				}
+			setFailureConditions(smTypes.DELETE, err.Error(), serviceInstance)
+			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+				return ctrl.Result{}, err
 			}
 
 			return ctrl.Result{}, err
