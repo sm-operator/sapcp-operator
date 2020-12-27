@@ -5,6 +5,13 @@ type Label struct {
 	Value []string `json:"value"`
 }
 
+type ControllerName string
+
+const (
+	ServiceInstanceController ControllerName = "ServiceInstance"
+	ServiceBindingController  ControllerName = "ServiceBinding"
+)
+
 const (
 	// ConditionReady represents that a given resource is in ready state.
 	ConditionReady = "Ready"

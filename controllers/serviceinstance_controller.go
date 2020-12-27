@@ -448,10 +448,12 @@ func (r *ServiceInstanceReconciler) removeFinalizer(ctx context.Context, service
 		log.Error(err, "failed to fetch latest service instance")
 		return err
 	}
-	serviceInstance.ObjectMeta.Finalizers = removeString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName)
-	if err := r.Update(ctx, serviceInstance); err != nil {
-		log.Error(err, "failed to remove finalizer")
-		return err
+	if containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
+		serviceInstance.ObjectMeta.Finalizers = removeString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName)
+		if err := r.Update(ctx, serviceInstance); err != nil {
+			log.Error(err, "failed to remove finalizer")
+			return err
+		}
 	}
 	return nil
 }

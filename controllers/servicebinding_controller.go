@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	types2 "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -78,7 +79,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// registering our finalizer.
 	if !containsString(serviceBinding.ObjectMeta.Finalizers, bindingFinalizerName) {
 		log.Info("Binding has no finalizer, adding it...")
-		if err := r.addFinalizer(ctx, serviceBinding); err != nil {
+		if err := r.addFinalizer(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -98,7 +99,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		setFailureConditions(smTypes.CREATE,
 			fmt.Sprintf("Unable to find referenced service instance with k8s name %s in namespace %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Namespace),
 			serviceBinding)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -111,7 +112,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		setInProgressCondition(smTypes.CREATE,
 			fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
 			serviceBinding)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -123,7 +124,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
 
 		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-		if err := r.Status().Update(ctx, serviceBinding); err != nil {
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
@@ -133,7 +134,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 				log.Error(err, "unable to update ServiceBinding status")
 				return ctrl.Result{}, err
 			}
@@ -161,8 +162,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 
 			r.resyncBindingStatus(serviceBinding, binding, serviceInstance.Status.InstanceID)
-			if err := r.Status().Update(ctx, serviceBinding); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
+			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -526,16 +526,26 @@ func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *ServiceBindingReconciler) removeFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
 	log.Info("removing finalizer")
-	binding.Finalizers = removeString(binding.Finalizers, bindingFinalizerName)
-	//binding.DeletionTimestamp = &metav1.Time{Time: time.Now()}
-	if err := r.Update(ctx, binding); err != nil {
+	if err := r.Get(ctx, types2.NamespacedName{Name: binding.Name, Namespace: binding.Namespace}, binding); err != nil {
+		log.Error(err, "failed to fetch latest service instance")
 		return err
+	}
+	if containsString(binding.ObjectMeta.Finalizers, bindingFinalizerName) {
+		binding.ObjectMeta.Finalizers = removeString(binding.ObjectMeta.Finalizers, bindingFinalizerName)
+		if err := r.Update(ctx, binding); err != nil {
+			log.Error(err, "failed to remove finalizer")
+			return err
+		}
 	}
 	return nil
 }
 
-func (r *ServiceBindingReconciler) addFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding) error {
-	binding.Finalizers = append(binding.Finalizers, bindingFinalizerName)
+func (r *ServiceBindingReconciler) addFinalizer(ctx context.Context, binding *v1alpha1.ServiceBinding, log logr.Logger) error {
+	if err := r.Get(ctx, types2.NamespacedName{Name: binding.Name, Namespace: binding.Namespace}, binding); err != nil {
+		log.Error(err, "failed to fetch latest service instance")
+		return err
+	}
+	binding.ObjectMeta.Finalizers = append(binding.ObjectMeta.Finalizers, bindingFinalizerName)
 	if err := r.Update(ctx, binding); err != nil {
 		return err
 	}

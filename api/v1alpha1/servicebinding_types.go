@@ -97,8 +97,8 @@ func (sb *ServiceBinding) SetConditions(conditions []metav1.Condition) {
 	sb.Status.Conditions = conditions
 }
 
-func (sb *ServiceBinding) GetControllerName() string {
-	return "ServiceBinding"
+func (sb *ServiceBinding) GetControllerName() ControllerName {
+	return ServiceBindingController
 }
 
 func (sb *ServiceBinding) GetParameters() *runtime.RawExtension {

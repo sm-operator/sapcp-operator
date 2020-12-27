@@ -95,8 +95,8 @@ func (in *ServiceInstance) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
-func (in *ServiceInstance) GetControllerName() string {
-	return "ServiceInstance"
+func (in *ServiceInstance) GetControllerName() ControllerName {
+	return ServiceInstanceController
 }
 
 func (in *ServiceInstance) GetParameters() *runtime.RawExtension {
