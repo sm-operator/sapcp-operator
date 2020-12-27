@@ -87,15 +87,12 @@ var _ = Describe("ServiceBinding controller", func() {
 	}
 
 	createBindingWithError := func(ctx context.Context, name, namespace, instanceName, externalName, failureMessage string) *v1alpha1.ServiceBinding {
-		createdBinding, err := createBindingWithoutAssertions(ctx, name, namespace, instanceName, externalName)
-		if err != nil {
-			Expect(err.Error()).To(ContainSubstring(failureMessage))
-		} else {
-			Expect(createdBinding.Status.SecretName).To(BeEmpty())
-			Expect(len(createdBinding.Status.Conditions)).To(Equal(2))
-			Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
-			Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(failureMessage))
-		}
+		createdBinding, _ := createBindingWithoutAssertions(ctx, name, namespace, instanceName, externalName)
+
+		Expect(createdBinding.Status.SecretName).To(BeEmpty())
+		Expect(len(createdBinding.Status.Conditions)).To(Equal(2))
+		Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
+		Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(failureMessage))
 
 		return nil
 	}
