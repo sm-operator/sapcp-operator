@@ -415,12 +415,12 @@ var _ = Describe("ServiceInstance controller", func() {
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
 						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}, nil)
 					})
-					It("should not fail", func() {
+					It("should update failure condition", func() {
 						Eventually(func() bool {
 							serviceInstance.Spec = updateSpec
 							updateInstance(serviceInstance)
 							err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
-							if err != nil || len(serviceInstance.Status.Conditions) != 1 || serviceInstance.Status.Conditions[0].Reason != Updated {
+							if err != nil || len(serviceInstance.Status.Conditions) != 2 || serviceInstance.Status.Conditions[0].Reason != UpdateFailed {
 								return false
 							}
 							return true

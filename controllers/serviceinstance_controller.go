@@ -145,33 +145,29 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		//TODO consider delete operation and maybe we should fail if operation does not exists
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", err.Error()), "operationURL", serviceInstance.Status.OperationURL)
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-			log.Info(fmt.Sprintf("Operation %s does not exist in SM, resyncing..", serviceInstance.Status.OperationURL))
-			smInstance, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
-			if getInstanceErr != nil {
+			if isDelete(serviceInstance.ObjectMeta) {
+				_, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
 				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-					log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating", serviceInstance.Status.InstanceID))
-					return r.createInstance(ctx, serviceInstance, log, smClient)
-				}
-				log.Error(err, fmt.Sprintf("unable to get ServiceInstance with id %s from SM", serviceInstance.Status.InstanceID))
-				setFailureConditions(Unknown, getInstanceErr.Error(), serviceInstance)
-				if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+					err := r.removeFinalizer(ctx, serviceInstance, log)
 					return ctrl.Result{}, err
 				}
-				return ctrl.Result{}, getInstanceErr
+				serviceInstance.Status.OperationType = ""
+				serviceInstance.Status.OperationURL = ""
+				setInProgressCondition(serviceInstance.Status.OperationType, "", serviceInstance)
+				err := r.updateStatus(ctx, serviceInstance, log)
+				return ctrl.Result{Requeue: true}, err
 			}
-
-			r.resyncInstanceStatus(serviceInstance, smInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
+			setFailureConditions(serviceInstance.Status.OperationType, "operation not found", serviceInstance)
+			serviceInstance.Status.OperationType = ""
+			serviceInstance.Status.OperationURL = ""
+			err := r.updateStatus(ctx, serviceInstance, log)
+			return ctrl.Result{}, err
 		}
-		setFailureConditions(Unknown, err.Error(), serviceInstance)
+		setFailureConditions(serviceInstance.Status.OperationType, err.Error(), serviceInstance)
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
-
 	}
 
 	switch status.State {
@@ -214,8 +210,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 }
 
 func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
-	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
-	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+
 	log.Info("Creating instance in SM")
 	instanceParameters, err := getParameters(serviceInstance)
 	if err != nil {
@@ -241,6 +236,9 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 
 		return ctrl.Result{}, err
 	}
+	//TODO handle self healing (reduce generation in case of failure) and async failure
+	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
+	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 
 	if operationURL != "" {
 		log.Info("Provision request is in progress")
@@ -306,7 +304,7 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 			Parameters:    instanceParameters,
 		},
 		Labels: instanceLabels,
-	}, nil)
+	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
 		setFailureConditions(smTypes.UPDATE, err.Error(), serviceInstance)

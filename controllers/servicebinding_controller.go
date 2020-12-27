@@ -150,7 +150,9 @@ func (r *ServiceBindingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			// Recovery - restore binding from SM
 			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", binding.ID))
 			if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
-				return ctrl.Result{}, err
+				if alreadyOwnedError := err.(*controllerutil.AlreadyOwnedError); alreadyOwnedError == nil {
+					return ctrl.Result{}, err
+				}
 			}
 
 			if binding.LastOperation.Type != smTypes.CREATE || binding.LastOperation.State == smTypes.SUCCEEDED {
