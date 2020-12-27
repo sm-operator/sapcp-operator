@@ -259,7 +259,7 @@ var _ = Describe("ServiceBinding controller", func() {
 						fakeClient.BindReturns(nil, "", errors.New(errorMessage))
 					})
 
-					FIt("should fail with the error returned from SM", func() {
+					It("should fail with the error returned from SM", func() {
 						createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
 							errorMessage)
 					})
