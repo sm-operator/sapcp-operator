@@ -105,6 +105,14 @@ func (sb *ServiceBinding) GetParameters() *runtime.RawExtension {
 	return sb.Spec.Parameters
 }
 
+func (sb *ServiceBinding) GetStatus() interface{} {
+	return sb.Status
+}
+
+func (sb *ServiceBinding) SetStatus(status interface{}) {
+	sb.Status = status.(ServiceBindingStatus)
+}
+
 // +kubebuilder:object:root=true
 
 // ServiceBindingList contains a list of ServiceBinding

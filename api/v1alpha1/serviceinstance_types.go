@@ -103,6 +103,14 @@ func (in *ServiceInstance) GetParameters() *runtime.RawExtension {
 	return in.Spec.Parameters
 }
 
+func (in *ServiceInstance) GetStatus() interface{} {
+	return in.Status
+}
+
+func (in *ServiceInstance) SetStatus(status interface{}) {
+	in.Status = status.(ServiceInstanceStatus)
+}
+
 // +kubebuilder:object:root=true
 
 // ServiceInstanceList contains a list of ServiceInstance

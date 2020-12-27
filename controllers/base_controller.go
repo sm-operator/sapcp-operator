@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"k8s.io/apimachinery/pkg/api/meta"
+	types2 "k8s.io/apimachinery/pkg/types"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/go-logr/logr"
@@ -87,6 +88,60 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, names
 		return nil, err
 	}
 	return cl, nil
+}
+
+func (r *BaseReconciler) removeFinalizer(ctx context.Context, object internal.SAPCPResource, finalizerName string) error {
+	if containsString(object.GetFinalizers(), finalizerName) {
+		finalizers := object.GetFinalizers()
+		finalizers = removeString(finalizers, finalizerName)
+		object.SetFinalizers(finalizers)
+		if err := r.Update(ctx, object); err != nil {
+			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+				return client.IgnoreNotFound(err)
+			}
+			if err := r.Update(ctx, object); err != nil {
+				return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *BaseReconciler) addFinalizer(ctx context.Context, object internal.SAPCPResource, finalizerName string) error {
+	if !containsString(object.GetFinalizers(), finalizerName) {
+		finalizers := object.GetFinalizers()
+		finalizers = append(finalizers, finalizerName)
+		object.SetFinalizers(finalizers)
+		if err := r.Update(ctx, object); err != nil {
+			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+				return fmt.Errorf("failed to fetch latest %s : %v", object.GetControllerName(), err)
+			}
+			if err := r.Update(ctx, object); err != nil {
+				return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *BaseReconciler) updateStatus(ctx context.Context, object internal.SAPCPResource, log logr.Logger) error {
+	log.Info(fmt.Sprintf("updating %s status", object.GetControllerName()))
+	if err := r.Status().Update(ctx, object); err != nil {
+		status := object.GetStatus()
+		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest %s and trying again", err.Error(), object.GetControllerName()))
+		if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+			log.Error(err, fmt.Sprintf("failed to fetch latest %s", object.GetControllerName()))
+			return err
+		}
+
+		object.SetStatus(status)
+		if err := r.Status().Update(ctx, object); err != nil {
+			log.Error(err, fmt.Sprintf("unable to update %s status", object.GetControllerName()))
+			return err
+		}
+	}
+	log.Info(fmt.Sprintf("updated %s status in k8s", object.GetControllerName()))
+	return nil
 }
 
 func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {
@@ -180,10 +235,10 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 	}
 
 	conditions := object.GetConditions()
-	readyCondition := metav1.Condition{Type: string(servicesv1alpha1.ConditionReady), Status: metav1.ConditionFalse, Reason: reason, Message: message}
+	readyCondition := metav1.Condition{Type: servicesv1alpha1.ConditionReady, Status: metav1.ConditionFalse, Reason: reason, Message: message}
 	meta.SetStatusCondition(&conditions, readyCondition)
 
-	failedCondition := metav1.Condition{Type: string(servicesv1alpha1.ConditionFailed), Status: metav1.ConditionTrue, Reason: reason, Message: message}
+	failedCondition := metav1.Condition{Type: servicesv1alpha1.ConditionFailed, Status: metav1.ConditionTrue, Reason: reason, Message: message}
 	meta.SetStatusCondition(&conditions, failedCondition)
 	object.SetConditions(conditions)
 }
