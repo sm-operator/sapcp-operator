@@ -177,12 +177,6 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient smclient.Client, serviceInstance *v1alpha1.ServiceInstance, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Creating smBinding in SM")
-	labels := make(map[string][]string, 3)
-
-	// add labels that can be used to construct OSB context in SM
-	labels[namespaceLabel] = []string{serviceInstance.Namespace}
-	labels[k8sNameLabel] = []string{serviceBinding.Name}
-	labels[clusterIDLabel] = []string{r.Config.ClusterID}
 
 	bindingParameters, err := getParameters(serviceBinding)
 	if err != nil {
@@ -191,8 +185,12 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	}
 
 	smBinding, operationURL, err := smClient.Bind(&smclientTypes.ServiceBinding{
-		Name:              serviceBinding.Spec.ExternalName,
-		Labels:            labels,
+		Name: serviceBinding.Spec.ExternalName,
+		Labels: smTypes.Labels{
+			namespaceLabel: []string{serviceInstance.Namespace},
+			k8sNameLabel:   []string{serviceBinding.Name},
+			clusterIDLabel: []string{r.Config.ClusterID},
+		},
 		ServiceInstanceID: serviceInstance.Status.InstanceID,
 		Parameters:        bindingParameters,
 	}, nil)
