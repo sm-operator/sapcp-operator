@@ -103,7 +103,6 @@ var _ = Describe("ServiceInstance controller", func() {
 	})
 
 	Describe("Create", func() {
-		//TODO add test for create instance that fails the first time but succeed the next time
 		Context("Invalid parameters", func() {
 			createInstanceWithFailure := func(spec v1alpha1.ServiceInstanceSpec) {
 				instance := &v1alpha1.ServiceInstance{
@@ -171,22 +170,48 @@ var _ = Describe("ServiceInstance controller", func() {
 
 			When("provision request to SM fails", func() {
 				var errMessage string
-				JustBeforeEach(func() {
-					errMessage = "failed to provision instance"
-					fakeClient.ProvisionReturns("", "", &smclient.ServiceManagerError{
-						StatusCode: http.StatusBadRequest,
-						Message:    errMessage,
+				Context("with 400 status", func() {
+					JustBeforeEach(func() {
+						errMessage = "failed to provision instance"
+						fakeClient.ProvisionReturns("", "", &smclient.ServiceManagerError{
+							StatusCode: http.StatusBadRequest,
+							Message:    errMessage,
+						})
+						fakeClient.ProvisionReturnsOnCall(1, fakeInstanceID, "", nil)
+
+					})
+
+					It("should have failure condition", func() {
+						serviceInstance = createInstance(ctx, instanceSpec)
+						Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
+						Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+						Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
 					})
 				})
-				JustAfterEach(func() {
-					fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
-				})
 
-				It("should have failure condition", func() {
-					serviceInstance = createInstance(ctx, instanceSpec)
-					Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
-					Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-					Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
+				Context("with 429 status eventually succeeds", func() {
+					JustBeforeEach(func() {
+						errMessage = "failed to provision instance"
+						fakeClient.ProvisionReturnsOnCall(0, "", "", &smclient.ServiceManagerError{
+							StatusCode: http.StatusTooManyRequests,
+							Message:    errMessage,
+						})
+						fakeClient.ProvisionReturnsOnCall(1, fakeInstanceID, "", nil)
+
+					})
+
+					It("should retry until success", func() {
+						serviceInstance = createInstance(ctx, instanceSpec)
+						Eventually(func() bool {
+							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance)
+							Expect(err).ToNot(HaveOccurred())
+							isReady := len(serviceInstance.Status.Conditions) == 1
+							return isReady
+						}, timeout, interval).Should(BeTrue())
+
+						Expect(len(serviceInstance.Status.Conditions)).To(Equal(1))
+						Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
+					})
 				})
 			})
 		})
@@ -200,9 +225,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					State: string(smTypes.IN_PROGRESS),
 				}, nil)
 			})
-			JustAfterEach(func() {
-				fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
-			})
+
 			createInstanceAsync := func() {
 				serviceInstance = createInstance(ctx, instanceSpec)
 				Expect(serviceInstance.Status.OperationURL).To(Not(BeEmpty()))

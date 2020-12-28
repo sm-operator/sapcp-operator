@@ -130,7 +130,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			if isDelete(serviceInstance.ObjectMeta) {
 				_, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
-				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
+				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && (smErr.StatusCode == http.StatusNotFound || smErr.StatusCode == http.StatusGone) {
 					err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName)
 					return ctrl.Result{}, err
 				}
@@ -363,7 +363,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 
 					return ctrl.Result{}, nil
 				} else if smError.StatusCode == http.StatusTooManyRequests {
-					setFailureConditions(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
+					setFailureConditions(smTypes.DELETE, fmt.Sprintf("Reached SM api call threshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
 					if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 						log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
 					}
@@ -371,15 +371,15 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 				}
 			}
 
-			log.Error(err, "failed to delete instance")
+			log.Error(deprovisionErr, "failed to delete instance")
 			// if fail to delete the instance in SM, return with error
 			// so that it can be retried
-			setFailureConditions(smTypes.DELETE, err.Error(), serviceInstance)
+			setFailureConditions(smTypes.DELETE, deprovisionErr.Error(), serviceInstance)
 			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 				return ctrl.Result{}, err
 			}
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, deprovisionErr
 		}
 
 		if operationURL != "" {
