@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 	types2 "k8s.io/apimachinery/pkg/types"
-	"net/http"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/go-logr/logr"
