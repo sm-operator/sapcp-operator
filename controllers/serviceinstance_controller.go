@@ -220,9 +220,9 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	if err != nil {
 		log.Error(err, "failed to create service instance", "servicePlanID", serviceInstance.Spec.ServicePlanID)
 		setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
-		err = ignoreFinalError(smTypes.CREATE, err)
+		err = ignoreFinalError(err)
 		if err == nil {
-			log.Info("error is final, will not try to provision again, updating observed generation")
+			log.Info("error is non transient, will not try to provision again, updating observed generation")
 			serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 		}
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -295,9 +295,9 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
 		setFailureConditions(smTypes.UPDATE, err.Error(), serviceInstance)
-		err = ignoreFinalError(smTypes.UPDATE, err)
+		err = ignoreFinalError(err)
 		if err == nil {
-			log.Info("error is final, will not try to update instance again, updating observed generation")
+			log.Info("error is non transient, will not try to update instance again, updating observed generation")
 			serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 		}
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -362,10 +362,10 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 					}
 
 					return ctrl.Result{}, nil
-				} else if smError.StatusCode == http.StatusTooManyRequests {
-					setFailureConditions(smTypes.DELETE, fmt.Sprintf("Reached SM api call threshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
+				} else if ignoreFinalError(smError) != nil {
+					setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to delete instance wirh transient error, will retry every %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
 					if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-						log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
+						return ctrl.Result{}, err
 					}
 					return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
 				}

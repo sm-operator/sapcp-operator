@@ -253,7 +253,7 @@ func isDelete(object metav1.ObjectMeta) bool {
 	return !object.DeletionTimestamp.IsZero()
 }
 
-func ignoreFinalError(operationType smTypes.OperationCategory, err error) error {
+func ignoreFinalError(err error) error {
 	if smError, ok := err.(*smclient.ServiceManagerError); ok {
 		if smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusServiceUnavailable {
 			return err
