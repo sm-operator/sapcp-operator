@@ -49,6 +49,7 @@ type ServiceBindingReconciler struct {
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances,verbs=get;list
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
 func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// TODO optimize log - use withValue where possible
