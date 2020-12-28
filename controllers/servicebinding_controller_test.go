@@ -78,7 +78,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			} else {
 				return len(createdBinding.Status.Conditions) > 0
 			}
-		}, timeout, interval).Should(BeTrue())
+		}, timeout*2, interval).Should(BeTrue())
 		return createdBinding, nil
 	}
 
@@ -93,7 +93,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		} else {
 			Expect(createdBinding.Status.SecretName).To(BeEmpty())
 			Expect(len(createdBinding.Status.Conditions)).To(Equal(2))
-			Expect(createdBinding.Status.Conditions[1].Status).To(Equal(v1alpha1.ConditionTrue))
+			Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
 			Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(failureMessage))
 		}
 
@@ -420,16 +420,16 @@ var _ = Describe("ServiceBinding controller", func() {
 
 							if testCase.lastOpState == smTypes.FAILED {
 								Expect(createdBinding.Status.Conditions).To(HaveLen(2))
-								Expect(createdBinding.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
+								Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
 								Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
 
-								Expect(createdBinding.Status.Conditions[1].Status).To(Equal(v1alpha1.ConditionTrue))
+								Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
 								Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
 								Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring("fake-description"))
 							} else {
 								Expect(createdBinding.Status.Conditions).To(HaveLen(1))
 								if testCase.lastOpState == smTypes.SUCCEEDED {
-									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionTrue))
+									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
 									Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
 
 									if testCase.lastOpType == smTypes.CREATE || testCase.lastOpType == smTypes.UPDATE {
@@ -437,7 +437,7 @@ var _ = Describe("ServiceBinding controller", func() {
 										validateSecretData(getSecret(context.Background(), createdBinding.Status.SecretName, createdBinding.Namespace), "secret_key", "secret_value")
 									}
 								} else {
-									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
+									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
 									Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
 								}
 							}
@@ -546,9 +546,9 @@ var _ = Describe("ServiceBinding controller", func() {
 					}, timeout, interval).Should(BeTrue())
 
 					Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
+					Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
 					Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(v1alpha1.ConditionTrue))
+					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
 					Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring("some-error"))
 
 					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
@@ -613,9 +613,9 @@ var _ = Describe("ServiceBinding controller", func() {
 					}, timeout, interval).Should(BeTrue())
 
 					Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
+					Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
 					Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(v1alpha1.ConditionTrue))
+					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
 					Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(errorMessage))
 
 					err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
