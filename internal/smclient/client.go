@@ -235,9 +235,7 @@ func (client *serviceManagerClient) GetBindingByID(id string, q *Parameters) (*t
 
 func (client *serviceManagerClient) Status(url string, q *Parameters) (*types.Operation, error) {
 	operation := &types.Operation{}
-	err := client.get(operation, url, &Parameters{
-		GeneralParams: q.GeneralParams,
-	})
+	err := client.get(operation, url, q)
 
 	return operation, err
 }

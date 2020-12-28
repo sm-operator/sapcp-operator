@@ -69,6 +69,7 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 
 	secret, err := r.SecretResolver.GetSecretForResource(ctx, object.GetNamespace())
 	if err != nil {
+		setFailureConditions(smTypes.CREATE, err.Error(), object)
 		return nil, err
 	}
 

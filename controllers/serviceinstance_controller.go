@@ -183,6 +183,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		}
 	}
 
+	serviceInstance.Status.ObservedGeneration++
 	serviceInstance.Status.OperationURL = ""
 	serviceInstance.Status.OperationType = ""
 
@@ -219,13 +220,17 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	if err != nil {
 		log.Error(err, "failed to create service instance", "servicePlanID", serviceInstance.Spec.ServicePlanID)
 		setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
+		err = ignoreFinalError(smTypes.CREATE, err)
+		if err == nil {
+			log.Info("error is final, will not try to provision again, updating observed generation")
+			serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+		}
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, ignoreFinalError(smTypes.CREATE, err)
+		return ctrl.Result{}, err
 	}
-	//TODO handle self healing (reduce generation in case of failure) and async failure
 
 	if operationURL != "" {
 		log.Info("Provision request is in progress")
@@ -244,7 +249,6 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 	log.Info("Instance provisioned successfully")
-	//TODO not final
 	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
 	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	setSuccessConditions(smTypes.CREATE, serviceInstance)
@@ -272,13 +276,6 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 		return ctrl.Result{}, err
 	}
 
-	if !smServiceInstance.Ready {
-		log.Info(fmt.Sprintf("instance ID %s not ready unable to update", serviceInstance.Status.InstanceID))
-		return ctrl.Result{}, nil
-	}
-
-	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
-	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	log.Info("updating instance in SM")
 	instanceParameters, err := getParameters(serviceInstance)
 	if err != nil {
@@ -298,7 +295,11 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
 		setFailureConditions(smTypes.UPDATE, err.Error(), serviceInstance)
-
+		err = ignoreFinalError(smTypes.UPDATE, err)
+		if err == nil {
+			log.Info("error is final, will not try to update instance again, updating observed generation")
+			serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+		}
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -319,6 +320,8 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 	log.Info("Instance updated successfully")
+	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
+	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	setSuccessConditions(smTypes.UPDATE, serviceInstance)
 	err = r.updateStatus(ctx, serviceInstance, log)
 	return ctrl.Result{}, err
@@ -339,11 +342,12 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		}
 
 		log.Info(fmt.Sprintf("Deleting instance with id %v from SM", serviceInstance.Status.InstanceID))
-		operationURL, err := smClient.Deprovision(serviceInstance.Status.InstanceID, nil)
-		if err != nil {
-			smError, isSMError := err.(*smclient.ServiceManagerError)
+		operationURL, deprovisionErr := smClient.Deprovision(serviceInstance.Status.InstanceID, nil)
+		if deprovisionErr != nil {
+
+			smError, isSMError := deprovisionErr.(*smclient.ServiceManagerError)
 			if isSMError {
-				if smError.StatusCode == http.StatusNotFound {
+				if smError.StatusCode == http.StatusGone || smError.StatusCode == http.StatusNotFound {
 					log.Info(fmt.Sprintf("instance id %s not found in SM", serviceInstance.Status.InstanceID))
 					//if not found it means success
 					serviceInstance.Status.InstanceID = ""
@@ -357,9 +361,9 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 						return ctrl.Result{}, err
 					}
 
-					return ctrl.Result{}, err
+					return ctrl.Result{}, nil
 				} else if smError.StatusCode == http.StatusTooManyRequests {
-					setInProgressCondition(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
+					setFailureConditions(smTypes.DELETE, fmt.Sprintf("Reached SM api call treshold, will try again in %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
 					if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 						log.Info("failed to set in progress condition in response to 429 error got from SM, ignoring...")
 					}
