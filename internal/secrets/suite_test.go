@@ -17,6 +17,11 @@ limitations under the License.
 package secrets_test
 
 import (
+	"context"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"testing"
 	"time"
 
@@ -28,8 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -53,7 +56,7 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{}
@@ -85,9 +88,17 @@ var _ = BeforeSuite(func(done Done) {
 		Expect(err).ToNot(HaveOccurred())
 	}()
 
-	k8sManager.GetCache().WaitForCacheSync(nil)
+	k8sManager.GetCache().WaitForCacheSync(context.Background())
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
+
+	nsSpec := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+	err = k8sClient.Create(context.Background(), nsSpec)
+	Expect(err).ToNot(HaveOccurred())
+
+	nsSpec = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: managementNamespace}}
+	err = k8sClient.Create(context.Background(), nsSpec)
+	Expect(err).ToNot(HaveOccurred())
 
 	close(done)
 }, 60)

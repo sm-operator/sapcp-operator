@@ -185,7 +185,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				It("should have failure condition", func() {
 					serviceInstance = createInstance(ctx, instanceSpec)
 					Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
-					Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(v1alpha1.ConditionFalse))
+					Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
 					Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
 				})
 			})

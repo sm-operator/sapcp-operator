@@ -28,7 +28,6 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	types2 "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -42,9 +41,9 @@ type ServiceInstanceReconciler struct {
 
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=services.cloud.sap.com,resources=serviceinstances/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
-func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("serviceinstance", req.NamespacedName)
 
 	serviceInstance := &servicesv1alpha1.ServiceInstance{}
@@ -71,7 +70,7 @@ func (r *ServiceInstanceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	// registering our finalizer.
 	if !containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
 		log.Info("instance has no finalizer, adding it...")
-		if err := r.addFinalizer(ctx, serviceInstance, log); err != nil {
+		if err := r.addFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -148,7 +147,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 			if isDelete(serviceInstance.ObjectMeta) {
 				_, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
 				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-					err := r.removeFinalizer(ctx, serviceInstance, log)
+					err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName)
 					return ctrl.Result{}, err
 				}
 				serviceInstance.Status.OperationType = ""
@@ -194,7 +193,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		setSuccessConditions(smTypes.OperationCategory(status.Type), serviceInstance)
 		if serviceInstance.Status.OperationType == smTypes.DELETE {
 			// delete was successful - remove our finalizer from the list and update it.
-			if err = r.removeFinalizer(ctx, serviceInstance, log); err != nil {
+			if err = r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -224,7 +223,11 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 			ServicePlanID: serviceInstance.Spec.ServicePlanID,
 			Parameters:    instanceParameters,
 		},
-		Labels: getInstanceLabels(serviceInstance, r.Config.ClusterID),
+		Labels: smTypes.Labels{
+			namespaceLabel: []string{serviceInstance.Namespace},
+			k8sNameLabel:   []string{serviceInstance.Name},
+			clusterIDLabel: []string{r.Config.ClusterID},
+		},
 	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 
 	if err != nil {
@@ -338,7 +341,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 	if containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
 		if len(serviceInstance.Status.InstanceID) == 0 {
 			log.Info("instance does not exists in SM, removing finalizer")
-			err := r.removeFinalizer(ctx, serviceInstance, log)
+			err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName)
 			return ctrl.Result{}, err
 		}
 
@@ -367,7 +370,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 					}
 
 					// remove our finalizer from the list and update it.
-					if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
+					if err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
 						return ctrl.Result{}, err
 					}
 
@@ -384,10 +387,9 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 			log.Error(err, "failed to delete instance")
 			// if fail to delete the instance in SM, return with error
 			// so that it can be retried
-			if setFailureConditions(smTypes.DELETE, err.Error(), serviceInstance) {
-				if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-					return ctrl.Result{}, err
-				}
+			setFailureConditions(smTypes.DELETE, err.Error(), serviceInstance)
+			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+				return ctrl.Result{}, err
 			}
 
 			return ctrl.Result{}, err
@@ -413,7 +415,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		}
 
 		// remove our finalizer from the list and update it.
-		if err := r.removeFinalizer(ctx, serviceInstance, log); err != nil {
+		if err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -444,56 +446,10 @@ func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1
 	}
 }
 
-func (r *ServiceInstanceReconciler) removeFinalizer(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {
-	log.Info("removing finalizer")
-	if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
-		log.Error(err, "failed to fetch latest service instance")
-		return err
-	}
-	serviceInstance.ObjectMeta.Finalizers = removeString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName)
-	if err := r.Update(ctx, serviceInstance); err != nil {
-		log.Error(err, "failed to remove finalizer")
-		return err
-	}
-	return nil
-}
-
-func (r *ServiceInstanceReconciler) addFinalizer(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {
-	if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
-		log.Error(err, "failed to fetch latest service instance")
-		return err
-	}
-	serviceInstance.ObjectMeta.Finalizers = append(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName)
-	if err := r.Update(ctx, serviceInstance); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r *ServiceInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&servicesv1alpha1.ServiceInstance{}).
 		Complete(r)
-}
-
-func (r *ServiceInstanceReconciler) updateStatus(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) error {
-	log.Info("updating service instance status")
-	if err := r.Status().Update(ctx, serviceInstance); err != nil {
-		status := serviceInstance.Status
-		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest instance and trying again", err.Error()))
-		if err := r.Get(ctx, types2.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance); err != nil {
-			log.Error(err, "failed to fetch latest instance")
-			return err
-		}
-
-		serviceInstance.Status = status
-		if err := r.Status().Update(ctx, serviceInstance); err != nil {
-			log.Error(err, "unable to update service instance status")
-			return err
-		}
-	}
-	log.Info("updated ServiceInstance status in k8s")
-	return nil
 }
 
 func (r *ServiceInstanceReconciler) getInstanceForRecovery(smClient smclient.Client, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (*types.ServiceInstance, error) {
@@ -518,17 +474,6 @@ func (r *ServiceInstanceReconciler) getInstanceForRecovery(smClient smclient.Cli
 	}
 	log.Info("instance not found in SM")
 	return nil, nil
-}
-
-func getInstanceLabels(serviceInstance *servicesv1alpha1.ServiceInstance, clusterID string) smTypes.Labels {
-	instanceLabels := make(map[string][]string, 3)
-	instanceLabels[namespaceLabel] = []string{serviceInstance.Namespace}
-	instanceLabels[k8sNameLabel] = []string{serviceInstance.Name}
-	instanceLabels[clusterIDLabel] = []string{clusterID}
-	for key, value := range serviceInstance.Spec.Labels {
-		instanceLabels[key] = value
-	}
-	return instanceLabels
 }
 
 func getInstanceLabelsForUpdate(k8sServiceInstance *servicesv1alpha1.ServiceInstance, smServiceInstance *types.ServiceInstance) smTypes.LabelChanges {

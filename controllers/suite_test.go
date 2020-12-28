@@ -17,13 +17,18 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/sm-operator/sapcp-operator/internal"
 	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net"
 	"path/filepath"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"testing"
 	"time"
 
@@ -33,16 +38,13 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
+	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -50,7 +52,7 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 const (
-	timeout      = time.Second * 10
+	timeout      = time.Second * 20
 	interval     = time.Millisecond * 250
 	syncPeriod   = time.Millisecond * 250
 	pollInterval = time.Millisecond * 250
@@ -70,13 +72,13 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			DirectoryPaths: []string{filepath.Join("..", "config", "webhook")},
+			Paths: []string{filepath.Join("..", "config", "webhook")},
 		},
 	}
 
@@ -162,6 +164,14 @@ var _ = BeforeSuite(func(done Done) {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
+	nsSpec := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+	err = k8sClient.Create(context.Background(), nsSpec)
+	Expect(err).ToNot(HaveOccurred())
+
+	nsSpec = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: bindingTestNamespace}}
+	err = k8sClient.Create(context.Background(), nsSpec)
+	Expect(err).ToNot(HaveOccurred())
+
 	close(done)
 }, 60)
 
@@ -172,13 +182,13 @@ var _ = AfterSuite(func() {
 })
 
 func isReady(resource internal.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == v1alpha1.ConditionTrue
+	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
 }
 
 func isInProgress(resource internal.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == v1alpha1.ConditionFalse
+	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionFalse
 }
 
 func isFailed(resource internal.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == v1alpha1.ConditionTrue
+	return len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == metav1.ConditionTrue
 }

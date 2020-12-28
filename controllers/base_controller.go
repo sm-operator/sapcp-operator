@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	types2 "k8s.io/apimachinery/pkg/types"
+
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/go-logr/logr"
 	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
@@ -12,7 +15,7 @@ import (
 	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -88,10 +91,58 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, names
 	return cl, nil
 }
 
-func conditionChanged(condition servicesv1alpha1.Condition, otherCondition *servicesv1alpha1.Condition) bool {
-	return condition.Message != otherCondition.Message ||
-		condition.Status != otherCondition.Status ||
-		condition.Reason != otherCondition.Reason
+func (r *BaseReconciler) removeFinalizer(ctx context.Context, object internal.SAPCPResource, finalizerName string) error {
+	if containsString(object.GetFinalizers(), finalizerName) {
+		finalizers := object.GetFinalizers()
+		finalizers = removeString(finalizers, finalizerName)
+		object.SetFinalizers(finalizers)
+		if err := r.Update(ctx, object); err != nil {
+			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+				return client.IgnoreNotFound(err)
+			}
+			if err := r.Update(ctx, object); err != nil {
+				return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *BaseReconciler) addFinalizer(ctx context.Context, object internal.SAPCPResource, finalizerName string) error {
+	if !containsString(object.GetFinalizers(), finalizerName) {
+		finalizers := object.GetFinalizers()
+		finalizers = append(finalizers, finalizerName)
+		object.SetFinalizers(finalizers)
+		if err := r.Update(ctx, object); err != nil {
+			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+				return fmt.Errorf("failed to fetch latest %s : %v", object.GetControllerName(), err)
+			}
+			if err := r.Update(ctx, object); err != nil {
+				return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *BaseReconciler) updateStatus(ctx context.Context, object internal.SAPCPResource, log logr.Logger) error {
+	log.Info(fmt.Sprintf("updating %s status", object.GetControllerName()))
+	if err := r.Status().Update(ctx, object); err != nil {
+		status := object.GetStatus()
+		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest %s and trying again", err.Error(), object.GetControllerName()))
+		if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+			log.Error(err, fmt.Sprintf("failed to fetch latest %s", object.GetControllerName()))
+			return err
+		}
+
+		object.SetStatus(status)
+		if err := r.Status().Update(ctx, object); err != nil {
+			log.Error(err, fmt.Sprintf("unable to update %s status", object.GetControllerName()))
+			return err
+		}
+	}
+	log.Info(fmt.Sprintf("updated %s status in k8s", object.GetControllerName()))
+	return nil
 }
 
 func getConditionReason(opType smTypes.OperationCategory, state smTypes.OperationState) string {
@@ -126,8 +177,6 @@ func getConditionReason(opType smTypes.OperationCategory, state smTypes.Operatio
 }
 
 func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SAPCPResource) {
-	conditions := make([]*servicesv1alpha1.Condition, 0)
-
 	var defaultMessage string
 	if operationType == smTypes.CREATE {
 		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
@@ -141,20 +190,16 @@ func setInProgressCondition(operationType smTypes.OperationCategory, message str
 		message = defaultMessage
 	}
 
-	conditions = append(conditions, &servicesv1alpha1.Condition{
-		Type:               servicesv1alpha1.ConditionReady,
-		Status:             servicesv1alpha1.ConditionFalse,
-		LastTransitionTime: v1.Now(),
-		Reason:             getConditionReason(operationType, smTypes.IN_PROGRESS),
-		Message:            message,
-	})
-
+	conditions := object.GetConditions()
+	if len(conditions) > 0 {
+		meta.RemoveStatusCondition(&conditions, servicesv1alpha1.ConditionFailed)
+	}
+	readyCondition := metav1.Condition{Type: servicesv1alpha1.ConditionReady, Status: metav1.ConditionFalse, Reason: getConditionReason(operationType, smTypes.IN_PROGRESS), Message: message}
+	meta.SetStatusCondition(&conditions, readyCondition)
 	object.SetConditions(conditions)
 }
 
 func setSuccessConditions(operationType smTypes.OperationCategory, object internal.SAPCPResource) {
-	conditions := make([]*servicesv1alpha1.Condition, 0)
-
 	var message string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s provisioned successfully", object.GetControllerName())
@@ -164,17 +209,16 @@ func setSuccessConditions(operationType smTypes.OperationCategory, object intern
 		message = fmt.Sprintf("%s deleted successfully", object.GetControllerName())
 	}
 
-	conditions = append(conditions, &servicesv1alpha1.Condition{
-		Type:               servicesv1alpha1.ConditionReady,
-		Status:             servicesv1alpha1.ConditionTrue,
-		LastTransitionTime: v1.Now(),
-		Reason:             getConditionReason(operationType, smTypes.SUCCEEDED),
-		Message:            message,
-	})
+	conditions := object.GetConditions()
+	if len(conditions) > 0 {
+		meta.RemoveStatusCondition(&conditions, servicesv1alpha1.ConditionFailed)
+	}
+	readyCondition := metav1.Condition{Type: servicesv1alpha1.ConditionReady, Status: metav1.ConditionTrue, Reason: getConditionReason(operationType, smTypes.SUCCEEDED), Message: message}
+	meta.SetStatusCondition(&conditions, readyCondition)
 	object.SetConditions(conditions)
 }
 
-func setFailureConditions(operationType smTypes.OperationCategory, errorMessage string, object internal.SAPCPResource) bool {
+func setFailureConditions(operationType smTypes.OperationCategory, errorMessage string, object internal.SAPCPResource) {
 	var message string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s create failed: %s", object.GetControllerName(), errorMessage)
@@ -191,44 +235,15 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 		reason = object.GetConditions()[0].Reason
 	}
 
-	readyCondition := servicesv1alpha1.Condition{
-		Type:               servicesv1alpha1.ConditionReady,
-		Status:             servicesv1alpha1.ConditionFalse,
-		LastTransitionTime: v1.Now(),
-		Reason:             reason,
-		Message:            message,
-	}
+	conditions := object.GetConditions()
+	readyCondition := metav1.Condition{Type: servicesv1alpha1.ConditionReady, Status: metav1.ConditionFalse, Reason: reason, Message: message}
+	meta.SetStatusCondition(&conditions, readyCondition)
 
-	failedCondition := servicesv1alpha1.Condition{
-		Type:               servicesv1alpha1.ConditionFailed,
-		Status:             servicesv1alpha1.ConditionTrue,
-		LastTransitionTime: v1.Now(),
-		Reason:             reason,
-		Message:            message,
-	}
-
-	if len(object.GetConditions()) != 2 {
-		object.SetConditions([]*servicesv1alpha1.Condition{&readyCondition, &failedCondition})
-		return true
-	}
-
-	for _, condition := range object.GetConditions() {
-		switch condition.Type {
-		case servicesv1alpha1.ConditionReady:
-			if conditionChanged(readyCondition, condition) {
-				object.SetConditions([]*servicesv1alpha1.Condition{&readyCondition, &failedCondition})
-				return true
-			}
-		case servicesv1alpha1.ConditionFailed:
-			if conditionChanged(failedCondition, condition) {
-				object.SetConditions([]*servicesv1alpha1.Condition{&readyCondition, &failedCondition})
-				return true
-			}
-		}
-	}
-	return false
+	failedCondition := metav1.Condition{Type: servicesv1alpha1.ConditionFailed, Status: metav1.ConditionTrue, Reason: reason, Message: message}
+	meta.SetStatusCondition(&conditions, failedCondition)
+	object.SetConditions(conditions)
 }
 
-func isDelete(object v1.ObjectMeta) bool {
+func isDelete(object metav1.ObjectMeta) bool {
 	return !object.DeletionTimestamp.IsZero()
 }
