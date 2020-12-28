@@ -222,7 +222,11 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 			ServicePlanID: serviceInstance.Spec.ServicePlanID,
 			Parameters:    instanceParameters,
 		},
-		Labels: getInstanceLabels(serviceInstance, r.Config.ClusterID),
+		Labels: smTypes.Labels{
+			namespaceLabel: []string{serviceInstance.Namespace},
+			k8sNameLabel:   []string{serviceInstance.Name},
+			clusterIDLabel: []string{r.Config.ClusterID},
+		},
 	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 
 	if err != nil {
@@ -469,17 +473,6 @@ func (r *ServiceInstanceReconciler) getInstanceForRecovery(smClient smclient.Cli
 	}
 	log.Info("instance not found in SM")
 	return nil, nil
-}
-
-func getInstanceLabels(serviceInstance *servicesv1alpha1.ServiceInstance, clusterID string) smTypes.Labels {
-	instanceLabels := make(map[string][]string, 3)
-	instanceLabels[namespaceLabel] = []string{serviceInstance.Namespace}
-	instanceLabels[k8sNameLabel] = []string{serviceInstance.Name}
-	instanceLabels[clusterIDLabel] = []string{clusterID}
-	for key, value := range serviceInstance.Spec.Labels {
-		instanceLabels[key] = value
-	}
-	return instanceLabels
 }
 
 func getInstanceLabelsForUpdate(k8sServiceInstance *servicesv1alpha1.ServiceInstance, smServiceInstance *types.ServiceInstance) smTypes.LabelChanges {
