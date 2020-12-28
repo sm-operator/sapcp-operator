@@ -83,16 +83,8 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
 	if serviceInstance.Status.InstanceID == "" {
 
-		if len(serviceInstance.Spec.ExternalName) == 0 {
-			serviceInstance.Spec.ExternalName = serviceInstance.Name
-		}
-
-		smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
+		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
-			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
 			return ctrl.Result{}, err
 		}
 
@@ -116,12 +108,8 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	//Update
 	log.Info(fmt.Sprintf("Updating instance with ID %s", serviceInstance.Status.InstanceID))
-	smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
+	smClient, err := r.getSMClient(ctx, log, serviceInstance)
 	if err != nil {
-		setFailureConditions(smTypes.UPDATE, fmt.Sprintf("failed to update service-manager client: %s", err.Error()), serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
 		return ctrl.Result{}, err
 	}
 
@@ -130,12 +118,8 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
 	log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceInstance.Status.OperationURL))
-	smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
+	smClient, err := r.getSMClient(ctx, log, serviceInstance)
 	if err != nil {
-		setFailureConditions(serviceInstance.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
 		return ctrl.Result{}, err
 	}
 
@@ -213,8 +197,10 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	log.Info("Creating instance in SM")
 	instanceParameters, err := getParameters(serviceInstance)
 	if err != nil {
+		//if parameters are invalid there is nothing we can do, the user should fix it according to the error message in the condition
 		log.Error(err, "failed to parse instance parameters")
-		return ctrl.Result{}, err
+		setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to parse instance parameters: %s", err.Error()), serviceInstance)
+		return ctrl.Result{}, nil
 	}
 
 	smInstanceID, operationURL, err := smClient.Provision(&types.ServiceInstance{
@@ -237,11 +223,9 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, ignoreFinalError(smTypes.CREATE, err)
 	}
 	//TODO handle self healing (reduce generation in case of failure) and async failure
-	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
-	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 
 	if operationURL != "" {
 		log.Info("Provision request is in progress")
@@ -260,6 +244,9 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 	log.Info("Instance provisioned successfully")
+	//TODO not final
+	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
+	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	setSuccessConditions(smTypes.CREATE, serviceInstance)
 	serviceInstance.Status.InstanceID = smInstanceID
 	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -346,12 +333,8 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		}
 
 		// our finalizer is present, so we need to delete the instance in SM
-		smClient, err := r.getSMClient(ctx, log, serviceInstance.Namespace)
+		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
-			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
 			return ctrl.Result{}, err
 		}
 

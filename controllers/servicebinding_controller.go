@@ -131,13 +131,8 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if serviceBinding.Status.BindingID == "" {
-		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding)
 		if err != nil {
-			setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
-			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
 			return ctrl.Result{}, err
 		}
 		binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
@@ -274,13 +269,8 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 		}
 
 		// our finalizer is present, so we need to delete the binding in SM
-		smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
+		smClient, err := r.getSMClient(ctx, log, serviceBinding)
 		if err != nil {
-			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
-			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
-				log.Error(err, "unable to update ServiceBinding status")
-				return ctrl.Result{}, err
-			}
 			return ctrl.Result{}, err
 		}
 
@@ -364,13 +354,8 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 
 func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
 	log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
-	smClient, err := r.getSMClient(ctx, log, serviceBinding.Namespace)
+	smClient, err := r.getSMClient(ctx, log, serviceBinding)
 	if err != nil {
-		setFailureConditions(serviceBinding.Status.OperationType, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), serviceBinding)
-		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
-			log.Error(err, "unable to update ServiceBinding status")
-			return ctrl.Result{}, err
-		}
 		return ctrl.Result{}, err
 	}
 

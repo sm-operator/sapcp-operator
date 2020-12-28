@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"k8s.io/apimachinery/pkg/api/meta"
 	types2 "k8s.io/apimachinery/pkg/types"
+	"net/http"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/go-logr/logr"
@@ -62,12 +62,12 @@ func getParameters(sapResource internal.SAPCPResource) (json.RawMessage, error) 
 	return instanceParameters, nil
 }
 
-func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, namespace string) (smclient.Client, error) {
+func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, object internal.SAPCPResource) (smclient.Client, error) {
 	if r.SMClient != nil {
 		return r.SMClient(), nil
 	}
 
-	secret, err := r.SecretResolver.GetSecretForResource(ctx, namespace)
+	secret, err := r.SecretResolver.GetSecretForResource(ctx, object.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +86,10 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, names
 
 	if err != nil {
 		log.Error(err, "Failed to initialize SM client")
+		setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), object)
+		if err := r.updateStatus(ctx, object, log); err != nil {
+			return nil, err
+		}
 		return nil, err
 	}
 	return cl, nil
@@ -246,4 +250,14 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 
 func isDelete(object metav1.ObjectMeta) bool {
 	return !object.DeletionTimestamp.IsZero()
+}
+
+func ignoreFinalError(operationType smTypes.OperationCategory, err error) error {
+	if smError, ok := err.(*smclient.ServiceManagerError); ok {
+		if smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusServiceUnavailable {
+			return err
+		}
+	}
+	//if error is final we ignore it (no point to retry)
+	return nil
 }
