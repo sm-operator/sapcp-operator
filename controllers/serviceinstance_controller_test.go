@@ -434,19 +434,22 @@ var _ = Describe("ServiceInstance controller", func() {
 
 				When("Instance has operation url to operation that no longer exist in SM", func() {
 					JustBeforeEach(func() {
-						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
+						fakeClient.UpdateInstanceReturnsOnCall(0, nil, "/v1/service_instances/id/operations/1234", nil)
+						fakeClient.UpdateInstanceReturnsOnCall(1, nil, "", nil)
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
-						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}, nil)
+						smInstance := &types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}
+						fakeClient.GetInstanceByIDReturns(smInstance, nil)
+						fakeClient.ListInstancesReturns(&types2.ServiceInstances{
+							ServiceInstances: []types2.ServiceInstance{*smInstance},
+						}, nil)
 					})
-					It("should update failure condition", func() {
+					It("should recover", func() {
 						Eventually(func() bool {
 							serviceInstance.Spec = updateSpec
 							updateInstance(serviceInstance)
 							err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
-							if err != nil || len(serviceInstance.Status.Conditions) != 2 || serviceInstance.Status.Conditions[0].Reason != UpdateFailed {
-								return false
-							}
-							return true
+							Expect(err).ToNot(HaveOccurred())
+							return len(serviceInstance.Status.Conditions) == 1 || serviceInstance.Status.Conditions[0].Status == metav1.ConditionTrue
 						}, timeout, interval).Should(BeTrue())
 					})
 				})
