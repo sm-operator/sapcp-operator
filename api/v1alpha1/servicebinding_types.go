@@ -113,6 +113,14 @@ func (sb *ServiceBinding) SetStatus(status interface{}) {
 	sb.Status = status.(ServiceBindingStatus)
 }
 
+func (sb *ServiceBinding) GetObservedGeneration() int64 {
+	return sb.Status.ObservedGeneration
+}
+
+func (sb *ServiceBinding) SetObservedGeneration(newObserved int64) {
+	sb.Status.ObservedGeneration = newObserved
+}
+
 // +kubebuilder:object:root=true
 
 // ServiceBindingList contains a list of ServiceBinding

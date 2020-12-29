@@ -1,5 +1,11 @@
 package v1alpha1
 
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
 type Label struct {
 	Key   string   `json:"key"`
 	Value []string `json:"value"`
@@ -19,3 +25,15 @@ const (
 	// ConditionFailed represents information about a final failure that should not be retried.
 	ConditionFailed = "Failed"
 )
+
+type SAPCPResource interface {
+	client.Object
+	SetConditions([]metav1.Condition)
+	GetConditions() []metav1.Condition
+	GetControllerName() ControllerName
+	GetParameters() *runtime.RawExtension
+	GetStatus() interface{}
+	SetStatus(status interface{})
+	GetObservedGeneration() int64
+	SetObservedGeneration(int64)
+}

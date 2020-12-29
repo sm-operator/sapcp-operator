@@ -123,9 +123,8 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		return ctrl.Result{}, err
 	}
 
-	status, err := smClient.Status(serviceInstance.Status.OperationURL, nil)
-	if err != nil {
-		//TODO consider delete operation and maybe we should fail if operation does not exists
+	status, statusErr := smClient.Status(serviceInstance.Status.OperationURL, nil)
+	if statusErr != nil {
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", err.Error()), "operationURL", serviceInstance.Status.OperationURL)
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			if isDelete(serviceInstance.ObjectMeta) {
@@ -146,11 +145,10 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 			err := r.updateStatus(ctx, serviceInstance, log)
 			return ctrl.Result{}, err
 		}
-		setFailureConditions(serviceInstance.Status.OperationType, err.Error(), serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
+		if isTransientError(statusErr) {
+			return r.markAsTransientError(ctx, serviceInstance.Status.OperationType, err.Error(), serviceInstance, log)
 		}
-		return ctrl.Result{}, err
+		return r.markAsNonTransientError(ctx, serviceInstance.Status.OperationType, err.Error(), serviceInstance, log)
 	}
 
 	switch status.State {
@@ -204,7 +202,7 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		return ctrl.Result{}, nil
 	}
 
-	smInstanceID, operationURL, err := smClient.Provision(&types.ServiceInstance{
+	smInstanceID, operationURL, smErr := smClient.Provision(&types.ServiceInstance{
 		ServiceInstanceBase: types.ServiceInstanceBase{
 			Name:          serviceInstance.Spec.ExternalName,
 			ServicePlanID: serviceInstance.Spec.ServicePlanID,
@@ -217,19 +215,12 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		},
 	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 
-	if err != nil {
+	if smErr != nil {
 		log.Error(err, "failed to create service instance", "servicePlanID", serviceInstance.Spec.ServicePlanID)
-		setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
-		err = ignoreFinalError(err)
-		if err == nil {
-			log.Info("error is non transient, will not try to provision again, updating observed generation")
-			serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+		if isTransientError(smErr) {
+			return r.markAsTransientError(ctx, smTypes.CREATE, smErr.Error(), serviceInstance, log)
 		}
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, err
+		return r.markAsNonTransientError(ctx, smTypes.CREATE, smErr.Error(), serviceInstance, log)
 	}
 
 	if operationURL != "" {
@@ -280,7 +271,7 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 	instanceParameters, err := getParameters(serviceInstance)
 	if err != nil {
 		log.Error(err, "failed to parse instance parameters")
-		return ctrl.Result{}, err
+		return r.markAsNonTransientError(ctx, smTypes.UPDATE, fmt.Sprintf("failed to parse parameters: %v", err.Error()), serviceInstance, log)
 	}
 	instanceLabels := getInstanceLabelsForUpdate(serviceInstance, smServiceInstance)
 
@@ -295,16 +286,10 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
 		setFailureConditions(smTypes.UPDATE, err.Error(), serviceInstance)
-		err = ignoreFinalError(err)
-		if err == nil {
-			log.Info("error is non transient, will not try to update instance again, updating observed generation")
-			serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
+		if isTransientError(err) {
+			return r.markAsTransientError(ctx, smTypes.UPDATE, err.Error(), serviceInstance, log)
 		}
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, err
+		return r.markAsNonTransientError(ctx, smTypes.UPDATE, err.Error(), serviceInstance, log)
 	}
 
 	if operationURL != "" {
@@ -362,24 +347,11 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 					}
 
 					return ctrl.Result{}, nil
-				} else if ignoreFinalError(smError) != nil {
-					setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to delete instance wirh transient error, will retry every %d seconds", r.Config.LongPollInterval/1000), serviceInstance)
-					if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-						return ctrl.Result{}, err
-					}
-					return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
+				} else if isTransientError(smError) {
+					return r.markAsTransientError(ctx, smTypes.DELETE, smError.Error(), serviceInstance, log)
 				}
 			}
-
-			log.Error(deprovisionErr, "failed to delete instance")
-			// if fail to delete the instance in SM, return with error
-			// so that it can be retried
-			setFailureConditions(smTypes.DELETE, deprovisionErr.Error(), serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, deprovisionErr
+			return r.markAsNonTransientError(ctx, smTypes.DELETE, smError.Error(), serviceInstance, log)
 		}
 
 		if operationURL != "" {

@@ -111,6 +111,14 @@ func (in *ServiceInstance) SetStatus(status interface{}) {
 	in.Status = status.(ServiceInstanceStatus)
 }
 
+func (in *ServiceInstance) GetObservedGeneration() int64 {
+	return in.Status.ObservedGeneration
+}
+
+func (in *ServiceInstance) SetObservedGeneration(newObserved int64) {
+	in.Status.ObservedGeneration = newObserved
+}
+
 // +kubebuilder:object:root=true
 
 // ServiceInstanceList contains a list of ServiceInstance
