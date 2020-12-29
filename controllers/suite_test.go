@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/sm-operator/sapcp-operator/internal"
 	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	v1 "k8s.io/api/core/v1"
@@ -181,14 +180,14 @@ var _ = AfterSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 })
 
-func isReady(resource internal.SAPCPResource) bool {
+func isReady(resource v1alpha1.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
 }
 
-func isInProgress(resource internal.SAPCPResource) bool {
+func isInProgress(resource v1alpha1.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionFalse
 }
 
-func isFailed(resource internal.SAPCPResource) bool {
+func isFailed(resource v1alpha1.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == metav1.ConditionTrue
 }

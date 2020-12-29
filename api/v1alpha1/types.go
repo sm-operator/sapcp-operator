@@ -26,6 +26,7 @@ const (
 	ConditionFailed = "Failed"
 )
 
+// +kubebuilder:object:generate=false
 type SAPCPResource interface {
 	client.Object
 	SetConditions([]metav1.Condition)
