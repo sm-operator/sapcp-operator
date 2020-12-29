@@ -126,29 +126,14 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 	status, statusErr := smClient.Status(serviceInstance.Status.OperationURL, nil)
 	if statusErr != nil {
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", statusErr.Error()), "operationURL", serviceInstance.Status.OperationURL)
-		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-			if isDelete(serviceInstance.ObjectMeta) {
-				_, getInstanceErr := smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{})
-				if smErr, ok := getInstanceErr.(*smclient.ServiceManagerError); ok && (smErr.StatusCode == http.StatusNotFound || smErr.StatusCode == http.StatusGone) {
-					err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName)
-					return ctrl.Result{}, err
-				}
-				serviceInstance.Status.OperationType = ""
-				serviceInstance.Status.OperationURL = ""
-				setInProgressCondition(serviceInstance.Status.OperationType, "", serviceInstance)
-				err := r.updateStatus(ctx, serviceInstance, log)
-				return ctrl.Result{Requeue: true}, err
-			}
-			setFailureConditions(serviceInstance.Status.OperationType, "operation not found", serviceInstance)
-			serviceInstance.Status.OperationType = ""
-			serviceInstance.Status.OperationURL = ""
-			err := r.updateStatus(ctx, serviceInstance, log)
-			return ctrl.Result{}, err
+		setFailureConditions(serviceInstance.Status.OperationType, statusErr.Error(), serviceInstance)
+		freshStatus := servicesv1alpha1.ServiceInstanceStatus{}
+		if isDelete(serviceInstance.ObjectMeta) {
+			freshStatus.InstanceID = serviceInstance.Status.InstanceID
 		}
-		if isTransientError(statusErr) {
-			return r.markAsTransientError(ctx, serviceInstance.Status.OperationType, statusErr.Error(), serviceInstance, log)
-		}
-		return r.markAsNonTransientError(ctx, serviceInstance.Status.OperationType, statusErr.Error(), serviceInstance, log)
+		serviceInstance.Status = freshStatus
+		_ = r.updateStatus(ctx, serviceInstance, log)
+		return ctrl.Result{}, statusErr
 	}
 
 	switch status.State {
@@ -328,8 +313,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		log.Info(fmt.Sprintf("Deleting instance with id %v from SM", serviceInstance.Status.InstanceID))
 		operationURL, deprovisionErr := smClient.Deprovision(serviceInstance.Status.InstanceID, nil)
 		if deprovisionErr != nil {
-			smError, isSMError := deprovisionErr.(*smclient.ServiceManagerError)
-			if isSMError {
+			if smError, isSMError := deprovisionErr.(*smclient.ServiceManagerError); isSMError {
 				if smError.StatusCode == http.StatusGone || smError.StatusCode == http.StatusNotFound {
 					log.Info(fmt.Sprintf("instance id %s not found in SM", serviceInstance.Status.InstanceID))
 					//if not found it means success
