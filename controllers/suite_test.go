@@ -184,10 +184,6 @@ func isReady(resource v1alpha1.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
 }
 
-func isInProgress(resource v1alpha1.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionFalse
-}
-
 func isFailed(resource v1alpha1.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == metav1.ConditionTrue
 }

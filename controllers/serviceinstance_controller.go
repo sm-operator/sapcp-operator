@@ -75,14 +75,15 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	if serviceInstance.Generation == serviceInstance.Status.ObservedGeneration {
+	if serviceInstance.Generation == serviceInstance.Status.ObservedGeneration && !isInProgress(serviceInstance) {
 		log.Info(fmt.Sprintf("Spec is not changed - ignoring... Generation is - %v", serviceInstance.Generation))
 		return ctrl.Result{}, nil
 	}
 
 	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
-	if serviceInstance.Status.InstanceID == "" {
+	serviceInstance.SetObservedGeneration(serviceInstance.Generation)
 
+	if serviceInstance.Status.InstanceID == "" {
 		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -127,6 +128,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 	if statusErr != nil {
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", statusErr.Error()), "operationURL", serviceInstance.Status.OperationURL)
 		setFailureConditions(serviceInstance.Status.OperationType, statusErr.Error(), serviceInstance)
+		// if failed to read operation status we cleanup the status to trigger re-sync from SM
 		freshStatus := servicesv1alpha1.ServiceInstanceStatus{Conditions: serviceInstance.GetConditions()}
 		if isDelete(serviceInstance.ObjectMeta) {
 			freshStatus.InstanceID = serviceInstance.Status.InstanceID
@@ -168,7 +170,6 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		}
 	}
 
-	serviceInstance.Status.ObservedGeneration++
 	serviceInstance.Status.OperationURL = ""
 	serviceInstance.Status.OperationType = ""
 
@@ -227,8 +228,6 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 	log.Info("Instance provisioned successfully")
-	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
-	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	setSuccessConditions(smTypes.CREATE, serviceInstance)
 	serviceInstance.Status.InstanceID = smInstanceID
 	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
@@ -291,8 +290,6 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 	log.Info("Instance updated successfully")
-	log.Info(fmt.Sprintf("updating observed generation from %d to %d", serviceInstance.Status.ObservedGeneration, serviceInstance.Generation))
-	serviceInstance.Status.ObservedGeneration = serviceInstance.Generation
 	setSuccessConditions(smTypes.UPDATE, serviceInstance)
 	err = r.updateStatus(ctx, serviceInstance, log)
 	return ctrl.Result{}, err

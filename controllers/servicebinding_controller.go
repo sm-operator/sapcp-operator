@@ -84,12 +84,13 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	if serviceBinding.GetObservedGeneration() > 0 {
+	if serviceBinding.GetObservedGeneration() > 0 && !isInProgress(serviceBinding) {
 		log.Info(fmt.Sprintf("Binding already created"))
 		return ctrl.Result{}, nil
 	}
 
-	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.Status.ObservedGeneration))
+	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.GetObservedGeneration()))
+	serviceBinding.SetObservedGeneration(serviceBinding.Generation)
 
 	log.Info("service instance name " + serviceBinding.Spec.ServiceInstanceName + " binding namespace " + serviceBinding.Namespace)
 	serviceInstance, err := r.getServiceInstanceForBinding(ctx, serviceBinding)
@@ -122,12 +123,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if serviceNotUsable(serviceInstance) {
 		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
-
-		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
+		return r.markAsTransientError(ctx, smTypes.CREATE, err.Error(), serviceBinding, log)
 	}
 
 	if serviceBinding.Status.BindingID == "" {
@@ -237,8 +233,6 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 
 	setSuccessConditions(smTypes.CREATE, serviceBinding)
 	serviceBinding.Status.BindingID = smBinding.ID
-	log.Info(fmt.Sprintf("Updating observed generation (%v) to generation (%v)", serviceBinding.Status.ObservedGeneration, serviceBinding.Generation))
-	serviceBinding.Status.ObservedGeneration = serviceBinding.Generation
 	log.Info("Updating binding", "bindingID", smBinding.ID)
 	if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 		return ctrl.Result{}, err
@@ -370,7 +364,6 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 
 	serviceBinding.Status.OperationURL = ""
 	serviceBinding.Status.OperationType = ""
-	serviceBinding.Status.ObservedGeneration = serviceBinding.Generation
 
 	err = r.updateStatus(ctx, serviceBinding, log)
 	return ctrl.Result{}, err

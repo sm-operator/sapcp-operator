@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	types2 "k8s.io/apimachinery/pkg/types"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/go-logr/logr"
@@ -99,34 +100,28 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 }
 
 func (r *BaseReconciler) removeFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string) error {
-	if containsString(object.GetFinalizers(), finalizerName) {
-		finalizers := object.GetFinalizers()
-		finalizers = removeString(finalizers, finalizerName)
-		object.SetFinalizers(finalizers)
+	controllerutil.RemoveFinalizer(object, finalizerName)
+	if err := r.Update(ctx, object); err != nil {
+		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+			return client.IgnoreNotFound(err)
+		}
+		controllerutil.RemoveFinalizer(object, finalizerName)
 		if err := r.Update(ctx, object); err != nil {
-			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
-				return client.IgnoreNotFound(err)
-			}
-			if err := r.Update(ctx, object); err != nil {
-				return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
-			}
+			return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
 		}
 	}
 	return nil
 }
 
 func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string) error {
-	if !containsString(object.GetFinalizers(), finalizerName) {
-		finalizers := object.GetFinalizers()
-		finalizers = append(finalizers, finalizerName)
-		object.SetFinalizers(finalizers)
+	controllerutil.AddFinalizer(object, finalizerName)
+	if err := r.Update(ctx, object); err != nil {
+		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+			return client.IgnoreNotFound(err)
+		}
+		controllerutil.AddFinalizer(object, finalizerName)
 		if err := r.Update(ctx, object); err != nil {
-			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
-				return fmt.Errorf("failed to fetch latest %s : %v", object.GetControllerName(), err)
-			}
-			if err := r.Update(ctx, object); err != nil {
-				return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
-			}
+			return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
 		}
 	}
 	return nil
@@ -137,7 +132,7 @@ func (r *BaseReconciler) updateStatus(ctx context.Context, object servicesv1alph
 	if err := r.Status().Update(ctx, object); err != nil {
 		status := object.GetStatus()
 		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest %s and trying again", err.Error(), object.GetControllerName()))
-		if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
 			log.Error(err, fmt.Sprintf("failed to fetch latest %s", object.GetControllerName()))
 			return err
 		}
@@ -284,4 +279,14 @@ func (r *BaseReconciler) markAsTransientError(ctx context.Context, operationType
 
 	log.Info(fmt.Sprintf("operation %s of %s encountered a transient error, will try again :)", operationType, object.GetControllerName()))
 	return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
+}
+
+func isInProgress(object servicesv1alpha1.SAPCPResource) bool {
+	conditions := object.GetConditions()
+	if len(conditions) == 0 {
+		return false
+	}
+	return len(conditions) == 1 &&
+		conditions[0].Type == servicesv1alpha1.ConditionReady &&
+		conditions[0].Status == metav1.ConditionFalse
 }
