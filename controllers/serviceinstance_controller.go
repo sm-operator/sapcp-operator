@@ -127,8 +127,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 	if statusErr != nil {
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", statusErr.Error()), "operationURL", serviceInstance.Status.OperationURL)
 		setFailureConditions(serviceInstance.Status.OperationType, statusErr.Error(), serviceInstance)
-		freshStatus := servicesv1alpha1.ServiceInstanceStatus{}
-		freshStatus.Conditions = serviceInstance.GetConditions()
+		freshStatus := servicesv1alpha1.ServiceInstanceStatus{Conditions: serviceInstance.GetConditions()}
 		if isDelete(serviceInstance.ObjectMeta) {
 			freshStatus.InstanceID = serviceInstance.Status.InstanceID
 		}
