@@ -371,7 +371,10 @@ var _ = Describe("ServiceBinding controller", func() {
 
 			When("referenced service instance is not ready", func() {
 				JustBeforeEach(func() {
+					fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeInstanceID, State: string(smTypes.IN_PROGRESS)}, nil)
 					setInProgressCondition(smTypes.CREATE, "", createdInstance)
+					createdInstance.Status.OperationURL = "/1234"
+					createdInstance.Status.OperationType = smTypes.CREATE
 					err := k8sClient.Status().Update(context.Background(), createdInstance)
 					Expect(err).ToNot(HaveOccurred())
 				})
@@ -384,6 +387,8 @@ var _ = Describe("ServiceBinding controller", func() {
 
 					// verify creation is retired and succeeds after instance is ready
 					setSuccessConditions(smTypes.CREATE, createdInstance)
+					createdInstance.Status.OperationType = ""
+					createdInstance.Status.OperationURL = ""
 					err = k8sClient.Status().Update(context.Background(), createdInstance)
 					Expect(err).ToNot(HaveOccurred())
 
