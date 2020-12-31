@@ -99,6 +99,20 @@ var _ = Describe("ServiceBinding controller", func() {
 
 		return nil
 	}
+	createBindingWithBlockedError := func(ctx context.Context, name, namespace, instanceName, externalName, failureMessage string) *v1alpha1.ServiceBinding {
+		createdBinding, err := createBindingWithoutAssertions(ctx, name, namespace, instanceName, externalName)
+		if err != nil {
+			Expect(err.Error()).To(ContainSubstring(failureMessage))
+		} else {
+			Expect(createdBinding.Status.SecretName).To(BeEmpty())
+			Expect(len(createdBinding.Status.Conditions)).To(Equal(1))
+			Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+			Expect(createdBinding.Status.Conditions[0].Message).To(ContainSubstring(failureMessage))
+			Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(Blocked))
+		}
+
+		return nil
+	}
 
 	createBinding := func(ctx context.Context, name, namespace, instanceName, externalName string) *v1alpha1.ServiceBinding {
 		createdBinding, err := createBindingWithoutAssertions(ctx, name, namespace, instanceName, externalName)
@@ -175,6 +189,9 @@ var _ = Describe("ServiceBinding controller", func() {
 				},
 			},
 		}, nil)
+
+		smInstance := &smclientTypes.ServiceInstance{ServiceInstanceBase: smclientTypes.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}
+		fakeClient.GetInstanceByIDReturns(smInstance, nil)
 	})
 
 	AfterEach(func() {
@@ -215,14 +232,14 @@ var _ = Describe("ServiceBinding controller", func() {
 		Context("Invalid parameters", func() {
 			When("service instance name is not provided", func() {
 				It("should fail", func() {
-					createBindingWithError(context.Background(), bindingName, bindingTestNamespace, "", "",
+					createBindingWithBlockedError(context.Background(), bindingName, bindingTestNamespace, "", "",
 						"spec.serviceInstanceName in body should be at least 1 chars long")
 				})
 			})
 
 			When("referenced service instance does not exist", func() {
 				It("should fail", func() {
-					createBindingWithError(context.Background(), bindingName, bindingTestNamespace, "no-such-instance", "",
+					createBindingWithBlockedError(context.Background(), bindingName, bindingTestNamespace, "no-such-instance", "",
 						"Unable to find referenced service instance with k8s name no-such-instance")
 				})
 			})
@@ -235,7 +252,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(err).ToNot(HaveOccurred())
 				})
 				It("should fail", func() {
-					createBindingWithError(context.Background(), bindingName, otherNamespace, instanceName, "",
+					createBindingWithBlockedError(context.Background(), bindingName, otherNamespace, instanceName, "",
 						fmt.Sprintf("Unable to find referenced service instance with k8s name %s", instanceName))
 				})
 			})
@@ -337,7 +354,7 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 				It("should retry and succeed once the instance is ready", func() {
 					// verify create fail with appropriate message
-					createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
+					createBindingWithBlockedError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
 						"is not usable")
 
 					// verify creation is retired and succeeds after instance is ready
@@ -360,6 +377,7 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 				It("should retry and succeed once the instance is ready", func() {
 					var err error
+
 					createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name", false)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(isInProgress(createdBinding)).To(BeTrue())

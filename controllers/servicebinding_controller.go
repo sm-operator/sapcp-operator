@@ -97,21 +97,19 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Unable to find referenced service instance with k8s name %s", serviceBinding.Spec.ServiceInstanceName))
 
-		setFailureConditions(smTypes.CREATE,
-			fmt.Sprintf("Unable to find referenced service instance with k8s name %s in namespace %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Namespace),
+		setBlockedCondition(fmt.Sprintf("Unable to find referenced service instance with k8s name %s in namespace %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Namespace),
 			serviceBinding)
 		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, err
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 
 	if serviceInProgress(serviceInstance) {
 		log.Info(fmt.Sprintf("Service instance with k8s name %s is not ready for binding yet", serviceInstance.Name))
 
-		setInProgressCondition(smTypes.CREATE,
-			fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
+		setBlockedCondition(fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
 			serviceBinding)
 		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
@@ -123,7 +121,13 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if serviceNotUsable(serviceInstance) {
 		err := fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
 		log.Error(err, fmt.Sprintf("Unable to create binding for instance %s", serviceBinding.Spec.ServiceInstanceName))
-		return r.markAsTransientError(ctx, smTypes.CREATE, err.Error(), serviceBinding, log)
+
+		setBlockedCondition(err.Error(), serviceBinding)
+		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}
 
 	if serviceBinding.Status.BindingID == "" {
@@ -192,7 +196,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 		if isTransientError(bindErr) {
 			return r.markAsTransientError(ctx, smTypes.CREATE, bindErr.Error(), serviceInstance, log)
 		}
-		return r.markAsNonTransientError(ctx, smTypes.CREATE, bindErr.Error(), serviceInstance, log)
+		return r.markAsNonTransientError(ctx, smTypes.CREATE, bindErr.Error(), serviceBinding, log)
 	}
 
 	if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {

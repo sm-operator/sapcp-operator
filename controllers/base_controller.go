@@ -41,6 +41,7 @@ const (
 	UpdateFailed = "UpdateFailed"
 	DeleteFailed = "DeleteFailed"
 
+	Blocked = "Blocked"
 	Unknown = "Unknown"
 )
 
@@ -72,7 +73,10 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 
 	secret, err := r.SecretResolver.GetSecretForResource(ctx, object.GetNamespace())
 	if err != nil {
-		setFailureConditions(smTypes.CREATE, err.Error(), object)
+		setBlockedCondition("Secret not found", object)
+		if err := r.updateStatus(ctx, object, log); err != nil {
+			return nil, err
+		}
 		return nil, err
 	}
 
@@ -243,6 +247,16 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 
 	failedCondition := metav1.Condition{Type: servicesv1alpha1.ConditionFailed, Status: metav1.ConditionTrue, Reason: reason, Message: message}
 	meta.SetStatusCondition(&conditions, failedCondition)
+	object.SetConditions(conditions)
+}
+
+func setBlockedCondition(message string, object servicesv1alpha1.SAPCPResource) {
+	conditions := object.GetConditions()
+	if len(conditions) > 0 {
+		meta.RemoveStatusCondition(&conditions, servicesv1alpha1.ConditionFailed)
+	}
+	readyBlockedCondition := metav1.Condition{Type: servicesv1alpha1.ConditionReady, Status: metav1.ConditionFalse, Reason: Blocked, Message: message}
+	meta.SetStatusCondition(&conditions, readyBlockedCondition)
 	object.SetConditions(conditions)
 }
 
