@@ -103,7 +103,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+		return ctrl.Result{}, err
 	}
 
 	if serviceInProgress(serviceInstance) {
@@ -127,7 +127,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
+		return ctrl.Result{}, err
 	}
 
 	if serviceBinding.Status.BindingID == "" {

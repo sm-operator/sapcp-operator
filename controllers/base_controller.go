@@ -266,11 +266,9 @@ func isDelete(object metav1.ObjectMeta) bool {
 
 func isTransientError(err error) bool {
 	if smError, ok := err.(*smclient.ServiceManagerError); ok {
-		if smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusServiceUnavailable {
-			return true
-		}
+		return smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusBadGateway ||
+			smError.StatusCode == http.StatusServiceUnavailable || smError.StatusCode == http.StatusGatewayTimeout
 	}
-	//if error is final we ignore it (no point to retry)
 	return false
 }
 
