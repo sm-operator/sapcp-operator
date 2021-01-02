@@ -310,8 +310,8 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		log.Info(fmt.Sprintf("Deleting instance with id %v from SM", serviceInstance.Status.InstanceID))
 		operationURL, deprovisionErr := smClient.Deprovision(serviceInstance.Status.InstanceID, nil)
 		if deprovisionErr != nil {
-			if smError, isSMError := deprovisionErr.(*smclient.ServiceManagerError); isSMError {
-				return r.markAsTransientError(ctx, smTypes.DELETE, smError.Error(), serviceInstance, log)
+			if isTransientError(deprovisionErr) {
+				return r.markAsTransientError(ctx, smTypes.DELETE, deprovisionErr.Error(), serviceInstance, log)
 			}
 
 			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to delete instance %s: %s", serviceInstance.Status.InstanceID, deprovisionErr.Error()), serviceInstance)

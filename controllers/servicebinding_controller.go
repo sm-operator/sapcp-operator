@@ -92,7 +92,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err != nil || serviceNotUsable(serviceInstance) {
 		var instanceErr error
 		if err != nil {
-			instanceErr = fmt.Errorf("unable to fetch service instance %s: %s", serviceBinding.Spec.ServiceInstanceName, err.Error())
+			instanceErr = fmt.Errorf("unable to find service instance %s: %s", serviceBinding.Spec.ServiceInstanceName, err.Error())
 		} else {
 			instanceErr = fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
 		}
@@ -254,8 +254,8 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 		log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
 		operationURL, unbindErr := smClient.Unbind(serviceBinding.Status.BindingID, nil)
 		if unbindErr != nil {
-			if smError, ok := unbindErr.(*smclient.ServiceManagerError); ok {
-				return r.markAsTransientError(ctx, smTypes.DELETE, smError.Error(), serviceBinding, log)
+			if isTransientError(unbindErr) {
+				return r.markAsTransientError(ctx, smTypes.DELETE, unbindErr.Error(), serviceBinding, log)
 			}
 
 			log.Error(unbindErr, "failed to delete binding")

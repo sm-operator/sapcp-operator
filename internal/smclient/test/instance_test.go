@@ -412,17 +412,16 @@ var _ = Describe("Instance test", func() {
 
 		Context("when service manager returns a status code not found", func() {
 			BeforeEach(func() {
-				responseBody := []byte(`{ "description": "Broker not found" }`)
+				responseBody := []byte(`{ "description": "Instance not found" }`)
 
 				handlerDetails = []HandlerDetails{
 					{Method: http.MethodDelete, Path: web.ServiceInstancesURL + "/", ResponseBody: responseBody, ResponseStatusCode: http.StatusNotFound},
 				}
 			})
-			It("should handle error", func() {
+			It("should be considered as success", func() {
 				location, err := client.Deprovision(instance.ID, params)
-				Expect(err).Should(HaveOccurred())
+				Expect(err).ShouldNot(HaveOccurred())
 				Expect(location).Should(BeEmpty())
-				verifyErrorMsg(err.Error(), handlerDetails[0].Path+instance.ID, handlerDetails[0].ResponseBody, handlerDetails[0].ResponseStatusCode)
 			})
 		})
 	})

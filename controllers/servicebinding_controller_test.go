@@ -240,7 +240,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			When("referenced service instance does not exist", func() {
 				It("should fail", func() {
 					createBindingWithBlockedError(context.Background(), bindingName, bindingTestNamespace, "no-such-instance", "",
-						"Unable to find referenced service instance with k8s name no-such-instance")
+						"unable to find service instance")
 				})
 			})
 
@@ -253,7 +253,7 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 				It("should fail", func() {
 					createBindingWithBlockedError(context.Background(), bindingName, otherNamespace, instanceName, "",
-						fmt.Sprintf("Unable to find referenced service instance with k8s name %s", instanceName))
+						fmt.Sprintf("unable to find service instance"))
 				})
 			})
 		})
