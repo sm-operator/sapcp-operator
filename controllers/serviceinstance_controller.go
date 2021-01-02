@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
@@ -68,11 +69,8 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// The object is not being deleted, so if it does not have our finalizer,
 	// then lets add the finalizer and update the object. This is equivalent
 	// registering our finalizer.
-	if !containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
-		log.Info("instance has no finalizer, adding it...")
-		if err := r.addFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := r.addFinalizer(ctx, serviceInstance, instanceFinalizerName, log); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	if serviceInstance.Generation == serviceInstance.Status.ObservedGeneration && !isInProgress(serviceInstance) {
@@ -164,7 +162,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		setSuccessConditions(smTypes.OperationCategory(status.Type), serviceInstance)
 		if serviceInstance.Status.OperationType == smTypes.DELETE {
 			// delete was successful - remove our finalizer from the list and update it.
-			if err = r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
+			if err = r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName, log); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -190,7 +188,7 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		return ctrl.Result{}, nil
 	}
 
-	smInstanceID, operationURL, smErr := smClient.Provision(&types.ServiceInstance{
+	smInstanceID, operationURL, provisionErr := smClient.Provision(&types.ServiceInstance{
 		ServiceInstanceBase: types.ServiceInstanceBase{
 			Name:          serviceInstance.Spec.ExternalName,
 			ServicePlanID: serviceInstance.Spec.ServicePlanID,
@@ -203,12 +201,12 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		},
 	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 
-	if smErr != nil {
+	if provisionErr != nil {
 		log.Error(err, "failed to create service instance", "servicePlanID", serviceInstance.Spec.ServicePlanID)
-		if isTransientError(smErr) {
-			return r.markAsTransientError(ctx, smTypes.CREATE, smErr.Error(), serviceInstance, log)
+		if isTransientError(provisionErr) {
+			return r.markAsTransientError(ctx, smTypes.CREATE, provisionErr.Error(), serviceInstance, log)
 		}
-		return r.markAsNonTransientError(ctx, smTypes.CREATE, smErr.Error(), serviceInstance, log)
+		return r.markAsNonTransientError(ctx, smTypes.CREATE, provisionErr.Error(), serviceInstance, log)
 	}
 
 	if operationURL != "" {
@@ -296,10 +294,10 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 }
 
 func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
-	if containsString(serviceInstance.ObjectMeta.Finalizers, instanceFinalizerName) {
+	if controllerutil.ContainsFinalizer(serviceInstance, instanceFinalizerName) {
 		if len(serviceInstance.Status.InstanceID) == 0 {
 			log.Info("instance does not exists in SM, removing finalizer")
-			err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName)
+			err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName, log)
 			return ctrl.Result{}, err
 		}
 
@@ -313,24 +311,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		operationURL, deprovisionErr := smClient.Deprovision(serviceInstance.Status.InstanceID, nil)
 		if deprovisionErr != nil {
 			if smError, isSMError := deprovisionErr.(*smclient.ServiceManagerError); isSMError {
-				if smError.StatusCode == http.StatusGone || smError.StatusCode == http.StatusNotFound {
-					log.Info(fmt.Sprintf("instance id %s not found in SM", serviceInstance.Status.InstanceID))
-					//if not found it means success
-					serviceInstance.Status.InstanceID = ""
-					setSuccessConditions(smTypes.DELETE, serviceInstance)
-					if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
-						return ctrl.Result{}, err
-					}
-
-					// remove our finalizer from the list and update it.
-					if err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
-						return ctrl.Result{}, err
-					}
-
-					return ctrl.Result{}, nil
-				} else if isTransientError(smError) {
-					return r.markAsTransientError(ctx, smTypes.DELETE, smError.Error(), serviceInstance, log)
-				}
+				return r.markAsTransientError(ctx, smTypes.DELETE, smError.Error(), serviceInstance, log)
 			}
 
 			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to delete instance %s: %s", serviceInstance.Status.InstanceID, deprovisionErr.Error()), serviceInstance)
@@ -360,7 +341,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		}
 
 		// remove our finalizer from the list and update it.
-		if err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName); err != nil {
+		if err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName, log); err != nil {
 			return ctrl.Result{}, err
 		}
 

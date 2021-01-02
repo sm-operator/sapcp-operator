@@ -103,30 +103,38 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 	return cl, nil
 }
 
-func (r *BaseReconciler) removeFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string) error {
-	controllerutil.RemoveFinalizer(object, finalizerName)
-	if err := r.Update(ctx, object); err != nil {
-		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
-			return client.IgnoreNotFound(err)
-		}
+func (r *BaseReconciler) removeFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string, log logr.Logger) error {
+	if controllerutil.ContainsFinalizer(object, finalizerName) {
 		controllerutil.RemoveFinalizer(object, finalizerName)
 		if err := r.Update(ctx, object); err != nil {
-			return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
+			if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+				return client.IgnoreNotFound(err)
+			}
+			controllerutil.RemoveFinalizer(object, finalizerName)
+			if err := r.Update(ctx, object); err != nil {
+				return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
+			}
 		}
+		log.Info(fmt.Sprintf("finalizer %s added to %s", finalizerName, object.GetControllerName()))
+		return nil
 	}
 	return nil
 }
 
-func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string) error {
-	controllerutil.AddFinalizer(object, finalizerName)
-	if err := r.Update(ctx, object); err != nil {
-		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
-			return client.IgnoreNotFound(err)
-		}
+func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string, log logr.Logger) error {
+	if !controllerutil.ContainsFinalizer(object, finalizerName) {
 		controllerutil.AddFinalizer(object, finalizerName)
 		if err := r.Update(ctx, object); err != nil {
-			return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
+			if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+				return client.IgnoreNotFound(err)
+			}
+			controllerutil.AddFinalizer(object, finalizerName)
+			if err := r.Update(ctx, object); err != nil {
+				return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
+			}
 		}
+		log.Info(fmt.Sprintf("finalizer %s removed from %s", finalizerName, object.GetControllerName()))
+		return nil
 	}
 	return nil
 }
