@@ -95,7 +95,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err != nil {
 			instanceErr = fmt.Errorf("unable to find service instance %s: %s", serviceBinding.Spec.ServiceInstanceName, err.Error())
 		} else {
-			instanceErr = fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
+			instanceErr = fmt.Errorf("service instance %s is not usable, unable to create binding %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name)
 		}
 
 		setBlockedCondition(instanceErr.Error(), serviceBinding)
