@@ -280,7 +280,7 @@ var _ = Describe("Instance test", func() {
 		Context("When valid instance is being provisioned asynchronously", func() {
 			var locationHeader string
 			BeforeEach(func() {
-				locationHeader = "test-location"
+				locationHeader = "/v1/service_instances/12345/operations/1234"
 				handlerDetails[0] = HandlerDetails{Method: http.MethodPost, Path: web.ServiceInstancesURL, ResponseStatusCode: http.StatusAccepted, Headers: map[string]string{"Location": locationHeader}}
 			})
 			It("should receive operation location", func() {
@@ -288,7 +288,7 @@ var _ = Describe("Instance test", func() {
 
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(location).Should(Equal(locationHeader))
-				Expect(responseInstanceID).Should(BeEmpty())
+				Expect(responseInstanceID).Should(Equal("12345"))
 			})
 		})
 
