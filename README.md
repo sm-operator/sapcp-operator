@@ -43,9 +43,6 @@
 ### Create kind with local docker registry
 `./hack/kind-with-registry.sh`
 
-### Run tests
-`make test`
-
 ### Deploy locally
 ```
 make docker-build
@@ -54,3 +51,85 @@ docker push localhost:5000/controller:latest
 make deploy IMG=localhost:5000/controller:latest
 ```
 
+### Run tests
+`make test`
+
+### SAPCP kubectl extension
+Download https://github.com/sm-operator/sapcp-operator/releases/download/${release}/kubectl-sapcp
+move its executable file to anywhere on your ``PATH``
+
+#### Usage
+```
+kubectl sapcp marketplace <namespace>
+kubectl sapcp services <namespace>
+kubectl sapcp plans <namespace>
+```
+
+## Using the SAPCP Operator
+
+#### Step 1: Creating a service instance
+
+1.  To create an instance of SAPCP, first create a `ServiceInstance` custom resource file.
+   *   `<serviceOfferingName>` is the SAPCP service that you want to create. To list SAPCP marketplace, run `kubectl sapcp marketplace`.
+   *   `<servicePlanName>` is the plan for the SAPCP service that you want to create.
+
+```yaml
+    apiVersion: services.cloud.sap.com/v1alpha1
+    kind: ServiceInstance
+    metadata:
+        name: myservice
+    spec:
+        servicePlanName: <PLAN>
+        serviceOfferingName: <SERVICE_CLASS>
+   ```
+
+2.  Create the service instance in your cluster.
+
+    ```bash
+    kubectl apply -f filepath/myservice.yaml
+    ```
+
+3.  Check that your service status is **Created** in your cluster.
+
+    ```bash
+    kubectl get serviceinstances
+    NAME        STATUS   AGE
+    myservice   Created  12s
+    ```
+
+
+#### Step 2: Binding the service instance
+
+1.  To bind your service to the cluster so that your apps can use the service, create a `ServiceBinding` custom resource, where the `serviceInstanceName` field is the name of the `ServiceInstance` custom resource that you previously created.
+
+    ```yaml
+    apiVersion: services.cloud.sap.com/v1alpha1
+    kind: ServiceBinding
+    metadata:
+        name: mybinding
+    spec:
+        serviceInstanceName: myservice
+    ```
+
+2.  Create the binding in your cluster.
+
+    ```bash
+    kubectl apply -f filepath/mybinding.yaml
+    ```
+
+3.  Check that your service status is **Created**.
+
+    ```bash
+    kubectl get service
+    NAME        INSTANCE    STATUS    AGE
+    mybinding   myservice   Created   9s
+    
+    ```
+
+4.  Check that a secret of the same name as your binding is created. The secret contains the service credentials that apps in your cluster can use to access the service.
+
+    ```bash
+    kubectl get secrets
+    NAME        TYPE     DATA   AGE
+    mybinding   Opaque   5      102s
+    ```
