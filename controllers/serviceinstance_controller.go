@@ -235,7 +235,7 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
 	var err error
 	var smServiceInstance *types.ServiceInstance
-	if smServiceInstance, err = smClient.GetInstanceByID(serviceInstance.Status.InstanceID, &smclient.Parameters{}); err != nil {
+	if smServiceInstance, err = smClient.GetInstanceByID(serviceInstance.Status.InstanceID, nil); err != nil {
 		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
 			log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating...", serviceInstance.Status.InstanceID))
 			serviceInstance.Status.InstanceID = ""
