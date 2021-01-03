@@ -286,7 +286,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			})
 		})
 
-		When("external name is not provided", func() {
+		/*When("external name is not provided", func() {
 			It("succeeds and uses the k8s name as external name", func() {
 				withoutExternal := v1alpha1.ServiceInstanceSpec{
 					ServicePlanName:     "a-plan-name",
@@ -297,7 +297,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceName))
 				Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
 			})
-		})
+		})*/
 	})
 
 	Describe("Update", func() {

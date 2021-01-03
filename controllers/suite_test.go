@@ -18,13 +18,10 @@ package controllers
 
 import (
 	"context"
-	"crypto/tls"
-	"fmt"
 	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"net"
 	"path/filepath"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -51,7 +48,7 @@ import (
 
 const (
 	timeout      = time.Second * 20
-	interval     = time.Millisecond * 10
+	interval     = time.Millisecond * 250
 	syncPeriod   = time.Millisecond * 250
 	pollInterval = time.Millisecond * 250
 )
@@ -69,15 +66,12 @@ func TestAPIs(t *testing.T) {
 		[]Reporter{printer.NewlineReporter{}})
 }
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
-		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			Paths: []string{filepath.Join("..", "config", "webhook")},
-		},
 	}
 
 	var err error
@@ -94,15 +88,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(k8sClient).ToNot(BeNil())
 
-	webhookInstallOptions := &testEnv.WebhookInstallOptions
-
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:             scheme.Scheme,
-		Host:               webhookInstallOptions.LocalServingHost,
-		Port:               webhookInstallOptions.LocalServingPort,
-		CertDir:            webhookInstallOptions.LocalServingCertDir,
-		LeaderElection:     false,
-		MetricsBindAddress: "0",
+		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
 
@@ -119,9 +106,6 @@ var _ = BeforeSuite(func(done Done) {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&servicesv1alpha1.ServiceInstance{}).SetupWebhookWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
 	err = (&ServiceBindingReconciler{
 		BaseReconciler: &BaseReconciler{
 			Client:   k8sManager.GetClient(),
@@ -133,28 +117,11 @@ var _ = BeforeSuite(func(done Done) {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&servicesv1alpha1.ServiceBinding{}).SetupWebhookWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
-	// +kubebuilder:scaffold:webhook
-
 	go func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
 	}()
-
-	// wait for the webhook server to get ready
-	dialer := &net.Dialer{Timeout: time.Second}
-	addrPort := fmt.Sprintf("%s:%d", webhookInstallOptions.LocalServingHost, webhookInstallOptions.LocalServingPort)
-	Eventually(func() error {
-		conn, err := tls.DialWithDialer(dialer, "tcp", addrPort, &tls.Config{InsecureSkipVerify: true})
-		if err != nil {
-			return err
-		}
-		_ = conn.Close()
-		return nil
-	}, timeout, interval).Should(Succeed())
 
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
@@ -167,7 +134,6 @@ var _ = BeforeSuite(func(done Done) {
 	err = k8sClient.Create(context.Background(), nsSpec)
 	Expect(err).ToNot(HaveOccurred())
 
-	close(done)
 }, 60)
 
 var _ = AfterSuite(func() {
