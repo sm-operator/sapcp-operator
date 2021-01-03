@@ -18,13 +18,10 @@ package controllers
 
 import (
 	"context"
-	"crypto/tls"
-	"fmt"
 	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"net"
 	"path/filepath"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -37,7 +34,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -70,24 +66,18 @@ func TestAPIs(t *testing.T) {
 		[]Reporter{printer.NewlineReporter{}})
 }
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
-		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			Paths: []string{filepath.Join("..", "config", "webhook")},
-		},
 	}
 
 	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
-
-	err = v1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
 
 	err = servicesv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -98,15 +88,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(k8sClient).ToNot(BeNil())
 
-	webhookInstallOptions := &testEnv.WebhookInstallOptions
-
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:             scheme.Scheme,
-		Host:               webhookInstallOptions.LocalServingHost,
-		Port:               webhookInstallOptions.LocalServingPort,
-		CertDir:            webhookInstallOptions.LocalServingCertDir,
-		LeaderElection:     false,
-		MetricsBindAddress: "0",
+		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
 
@@ -123,9 +106,6 @@ var _ = BeforeSuite(func(done Done) {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&servicesv1alpha1.ServiceInstance{}).SetupWebhookWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
 	err = (&ServiceBindingReconciler{
 		BaseReconciler: &BaseReconciler{
 			Client:   k8sManager.GetClient(),
@@ -137,28 +117,11 @@ var _ = BeforeSuite(func(done Done) {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&servicesv1alpha1.ServiceBinding{}).SetupWebhookWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
-	// +kubebuilder:scaffold:webhook
-
 	go func() {
 		defer GinkgoRecover()
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
 	}()
-
-	// wait for the webhook server to get ready
-	dialer := &net.Dialer{Timeout: time.Second}
-	addrPort := fmt.Sprintf("%s:%d", webhookInstallOptions.LocalServingHost, webhookInstallOptions.LocalServingPort)
-	Eventually(func() error {
-		conn, err := tls.DialWithDialer(dialer, "tcp", addrPort, &tls.Config{InsecureSkipVerify: true})
-		if err != nil {
-			return err
-		}
-		conn.Close()
-		return nil
-	}, timeout, interval).Should(Succeed())
 
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
@@ -171,7 +134,6 @@ var _ = BeforeSuite(func(done Done) {
 	err = k8sClient.Create(context.Background(), nsSpec)
 	Expect(err).ToNot(HaveOccurred())
 
-	close(done)
 }, 60)
 
 var _ = AfterSuite(func() {
@@ -180,11 +142,11 @@ var _ = AfterSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 })
 
-func isReady(resource v1alpha1.SAPCPResource) bool {
+func isReady(resource servicesv1alpha1.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
 }
 
-func isFailed(resource v1alpha1.SAPCPResource) bool {
+func isFailed(resource servicesv1alpha1.SAPCPResource) bool {
 	return (len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == metav1.ConditionTrue) ||
 		len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionFalse && resource.GetConditions()[0].Reason == Blocked
 }

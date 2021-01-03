@@ -131,9 +131,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			// Recovery - restore binding from SM
 			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", binding.ID))
 			if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
-				if alreadyOwnedError := err.(*controllerutil.AlreadyOwnedError); alreadyOwnedError == nil {
-					return ctrl.Result{}, err
-				}
+				return ctrl.Result{}, err
 			}
 
 			if binding.LastOperation.Type != smTypes.CREATE || binding.LastOperation.State == smTypes.SUCCEEDED {
@@ -476,8 +474,12 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	log.Info("Creating binding secret")
 	if err := r.Create(ctx, secret); err != nil {
-		logger.Error(err, "Failed to store binding secret")
-		return err
+		if apierrors.IsAlreadyExists(err) {
+			if err = r.Update(ctx, secret); err != nil {
+				logger.Error(err, "Failed to store binding secret")
+				return err
+			}
+		}
 	}
 
 	k8sBinding.Status.SecretName = k8sBinding.Name

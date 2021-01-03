@@ -73,17 +73,20 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 	}
 
 	secret, err := r.SecretResolver.GetSecretForResource(ctx, object.GetNamespace())
-	if err != nil {
+	if err != nil || secret == nil {
 		setBlockedCondition("Secret not found", object)
 		if err := r.updateStatus(ctx, object, log); err != nil {
 			return nil, err
 		}
-		return nil, err
+		var secretResolveErr error
+		if err != nil {
+			secretResolveErr = fmt.Errorf("could not resolve SM secret: %s", err.Error())
+		} else {
+			secretResolveErr = fmt.Errorf("SM secret not found")
+		}
+		return nil, secretResolveErr
 	}
 
-	if secret == nil {
-		return nil, fmt.Errorf("cannot create SM client - secret is missing")
-	}
 	secretData := secret.Data
 	cl, err := smclient.NewClient(ctx, &smclient.ClientConfig{
 		ClientID:     string(secretData["clientid"]),

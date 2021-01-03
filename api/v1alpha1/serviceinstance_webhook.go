@@ -45,5 +45,3 @@ func (r *ServiceInstance) Default() {
 		r.Spec.ExternalName = r.Name
 	}
 }
-
-// TODO + validate secret exist for resource - requires api client - add validator again
