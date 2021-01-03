@@ -78,6 +78,10 @@ type ServiceInstanceStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.serviceOfferingName",name="Offering",type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.servicePlanName",name="Plan",type=string
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[0].reason",name="Status",type=string
+// +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name="Age",type=date
 
 // ServiceInstance is the Schema for the serviceinstances API
 type ServiceInstance struct {
@@ -109,6 +113,14 @@ func (in *ServiceInstance) GetStatus() interface{} {
 
 func (in *ServiceInstance) SetStatus(status interface{}) {
 	in.Status = status.(ServiceInstanceStatus)
+}
+
+func (in *ServiceInstance) GetObservedGeneration() int64 {
+	return in.Status.ObservedGeneration
+}
+
+func (in *ServiceInstance) SetObservedGeneration(newObserved int64) {
+	in.Status.ObservedGeneration = newObserved
 }
 
 // +kubebuilder:object:root=true

@@ -8,6 +8,16 @@ metadata:
   creationTimestamp: null
   name: servicebindings.services.cloud.sap.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.serviceInstanceName
+    name: Instance
+    type: string
+  - JSONPath: .status.conditions[0].reason
+    name: Status
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: services.cloud.sap.com
   names:
     kind: ServiceBinding

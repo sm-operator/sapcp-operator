@@ -181,6 +181,9 @@ func (client *serviceManagerClient) Provision(instance *types.ServiceInstance, s
 	}
 	if len(location) > 0 {
 		instanceID = ExtractInstanceID(location)
+		if len(instanceID) == 0 {
+			return "", "", fmt.Errorf("failed to extract instance ID from operation URL %s", location)
+		}
 	} else if newInstance != nil {
 		instanceID = newInstance.ID
 	}
@@ -235,9 +238,7 @@ func (client *serviceManagerClient) GetBindingByID(id string, q *Parameters) (*t
 
 func (client *serviceManagerClient) Status(url string, q *Parameters) (*types.Operation, error) {
 	operation := &types.Operation{}
-	err := client.get(operation, url, &Parameters{
-		GeneralParams: q.GeneralParams,
-	})
+	err := client.get(operation, url, q)
 
 	return operation, err
 }
@@ -312,6 +313,10 @@ func (client *serviceManagerClient) delete(url string, q *Parameters) (string, e
 		return "", err
 	}
 	switch response.StatusCode {
+	case http.StatusGone:
+		fallthrough
+	case http.StatusNotFound:
+		fallthrough
 	case http.StatusOK:
 		return "", nil
 	case http.StatusAccepted:

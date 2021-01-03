@@ -306,17 +306,16 @@ var _ = Describe("Binding test", func() {
 
 		Context("when service manager returns a status code not found", func() {
 			BeforeEach(func() {
-				responseBody := []byte(`{ "description": "Broker not found" }`)
+				responseBody := []byte(`{ "description": "Binding not found" }`)
 
 				handlerDetails = []HandlerDetails{
 					{Method: http.MethodDelete, Path: web.ServiceBindingsURL + "/", ResponseBody: responseBody, ResponseStatusCode: http.StatusNotFound},
 				}
 			})
-			It("should handle error", func() {
+			It("should be considered as success", func() {
 				location, err := client.Unbind(binding.ID, params)
-				Expect(err).Should(HaveOccurred())
+				Expect(err).ShouldNot(HaveOccurred())
 				Expect(location).Should(BeEmpty())
-				verifyErrorMsg(err.Error(), handlerDetails[0].Path+binding.ID, handlerDetails[0].ResponseBody, handlerDetails[0].ResponseStatusCode)
 			})
 		})
 	})

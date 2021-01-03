@@ -10,7 +10,7 @@ import (
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"github.com/sm-operator/sapcp-operator/internal/smclient/smclientfakes"
-	types2 "github.com/sm-operator/sapcp-operator/internal/smclient/types"
+	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -93,7 +93,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		fakeClient = &smclientfakes.FakeClient{}
 		fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
 		fakeClient.DeprovisionReturns("", nil)
-		fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}}, nil)
+		fakeClient.GetInstanceByIDReturns(&smclientTypes.ServiceInstance{ServiceInstanceBase: smclientTypes.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}}, nil)
 	})
 
 	AfterEach(func() {
@@ -103,7 +103,6 @@ var _ = Describe("ServiceInstance controller", func() {
 	})
 
 	Describe("Create", func() {
-		//TODO add test for create instance that fails the first time but succeed the next time
 		Context("Invalid parameters", func() {
 			createInstanceWithFailure := func(spec v1alpha1.ServiceInstanceSpec) {
 				instance := &v1alpha1.ServiceInstance{
@@ -171,22 +170,48 @@ var _ = Describe("ServiceInstance controller", func() {
 
 			When("provision request to SM fails", func() {
 				var errMessage string
-				JustBeforeEach(func() {
-					errMessage = "failed to provision instance"
-					fakeClient.ProvisionReturns("", "", &smclient.ServiceManagerError{
-						StatusCode: http.StatusBadRequest,
-						Message:    errMessage,
+				Context("with 400 status", func() {
+					JustBeforeEach(func() {
+						errMessage = "failed to provision instance"
+						fakeClient.ProvisionReturns("", "", &smclient.ServiceManagerError{
+							StatusCode: http.StatusBadRequest,
+							Message:    errMessage,
+						})
+						fakeClient.ProvisionReturnsOnCall(1, fakeInstanceID, "", nil)
+
+					})
+
+					It("should have failure condition", func() {
+						serviceInstance = createInstance(ctx, instanceSpec)
+						Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
+						Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+						Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
 					})
 				})
-				JustAfterEach(func() {
-					fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
-				})
 
-				It("should have failure condition", func() {
-					serviceInstance = createInstance(ctx, instanceSpec)
-					Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
-					Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-					Expect(serviceInstance.Status.Conditions[0].Message).To(ContainSubstring(errMessage))
+				Context("with 429 status eventually succeeds", func() {
+					JustBeforeEach(func() {
+						errMessage = "failed to provision instance"
+						fakeClient.ProvisionReturnsOnCall(0, "", "", &smclient.ServiceManagerError{
+							StatusCode: http.StatusTooManyRequests,
+							Message:    errMessage,
+						})
+						fakeClient.ProvisionReturnsOnCall(1, fakeInstanceID, "", nil)
+
+					})
+
+					It("should retry until success", func() {
+						serviceInstance = createInstance(ctx, instanceSpec)
+						Eventually(func() bool {
+							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance)
+							Expect(err).ToNot(HaveOccurred())
+							isReady := len(serviceInstance.Status.Conditions) == 1
+							return isReady
+						}, timeout, interval).Should(BeTrue())
+
+						Expect(len(serviceInstance.Status.Conditions)).To(Equal(1))
+						Expect(serviceInstance.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
+					})
 				})
 			})
 		})
@@ -194,15 +219,13 @@ var _ = Describe("ServiceInstance controller", func() {
 		Context("Async", func() {
 			BeforeEach(func() {
 				fakeClient.ProvisionReturns(fakeInstanceID, "/v1/service_instances/fakeid/operations/1234", nil)
-				fakeClient.StatusReturns(&types2.Operation{
+				fakeClient.StatusReturns(&smclientTypes.Operation{
 					ID:    "1234",
 					Type:  string(smTypes.CREATE),
 					State: string(smTypes.IN_PROGRESS),
 				}, nil)
 			})
-			JustAfterEach(func() {
-				fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
-			})
+
 			createInstanceAsync := func() {
 				serviceInstance = createInstance(ctx, instanceSpec)
 				Expect(serviceInstance.Status.OperationURL).To(Not(BeEmpty()))
@@ -212,7 +235,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			When("polling ends with success", func() {
 				It("should update in progress condition and provision the instance successfully", func() {
 					createInstanceAsync()
-					fakeClient.StatusReturns(&types2.Operation{
+					fakeClient.StatusReturns(&smclientTypes.Operation{
 						ID:    "1234",
 						Type:  string(smTypes.CREATE),
 						State: string(smTypes.SUCCEEDED),
@@ -229,7 +252,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			When("polling ends with failure", func() {
 				It("should update in progress condition and afterwards failure condition", func() {
 					createInstanceAsync()
-					fakeClient.StatusReturns(&types2.Operation{
+					fakeClient.StatusReturns(&smclientTypes.Operation{
 						ID:    "1234",
 						Type:  string(smTypes.CREATE),
 						State: string(smTypes.FAILED),
@@ -249,10 +272,10 @@ var _ = Describe("ServiceInstance controller", func() {
 			When("instance exists in SM", func() {
 				BeforeEach(func() {
 					fakeClient.ProvisionReturns("", "", fmt.Errorf("ERROR"))
-					fakeClient.ListInstancesReturns(&types2.ServiceInstances{
-						ServiceInstances: []types2.ServiceInstance{
+					fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
+						ServiceInstances: []smclientTypes.ServiceInstance{
 							{
-								ServiceInstanceBase: types2.ServiceInstanceBase{
+								ServiceInstanceBase: smclientTypes.ServiceInstanceBase{
 									ID:            fakeInstanceID,
 									Name:          fakeInstanceName,
 									LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
@@ -262,7 +285,7 @@ var _ = Describe("ServiceInstance controller", func() {
 					}, nil)
 				})
 				AfterEach(func() {
-					fakeClient.ListInstancesReturns(&types2.ServiceInstances{ServiceInstances: []types2.ServiceInstance{}}, nil)
+					fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{ServiceInstances: []smclientTypes.ServiceInstance{}}, nil)
 				})
 				It("should point to the existing instance and not create a new one", func() {
 					serviceInstance = createInstance(ctx, instanceSpec)
@@ -339,7 +362,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				When("spec is changed", func() {
 					BeforeEach(func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
-						fakeClient.StatusReturns(&types2.Operation{
+						fakeClient.StatusReturns(&smclientTypes.Operation{
 							ID:    "1234",
 							Type:  string(smTypes.UPDATE),
 							State: string(smTypes.IN_PROGRESS),
@@ -349,7 +372,7 @@ var _ = Describe("ServiceInstance controller", func() {
 						serviceInstance.Spec = updateSpec
 						updatedInstance := updateInstance(serviceInstance)
 						Expect(updatedInstance.Status.Conditions[0].Reason).To(Equal(UpdateInProgress))
-						fakeClient.StatusReturns(&types2.Operation{
+						fakeClient.StatusReturns(&smclientTypes.Operation{
 							ID:    "1234",
 							Type:  string(smTypes.UPDATE),
 							State: string(smTypes.SUCCEEDED),
@@ -384,7 +407,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				When("spec is changed", func() {
 					BeforeEach(func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
-						fakeClient.StatusReturns(&types2.Operation{
+						fakeClient.StatusReturns(&smclientTypes.Operation{
 							ID:    "1234",
 							Type:  string(smTypes.UPDATE),
 							State: string(smTypes.IN_PROGRESS),
@@ -394,7 +417,7 @@ var _ = Describe("ServiceInstance controller", func() {
 						serviceInstance.Spec = updateSpec
 						updatedInstance := updateInstance(serviceInstance)
 						Expect(updatedInstance.Status.Conditions[0].Reason).To(Equal(UpdateInProgress))
-						fakeClient.StatusReturns(&types2.Operation{
+						fakeClient.StatusReturns(&smclientTypes.Operation{
 							ID:    "1234",
 							Type:  string(smTypes.UPDATE),
 							State: string(smTypes.FAILED),
@@ -411,19 +434,22 @@ var _ = Describe("ServiceInstance controller", func() {
 
 				When("Instance has operation url to operation that no longer exist in SM", func() {
 					JustBeforeEach(func() {
-						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
+						fakeClient.UpdateInstanceReturnsOnCall(0, nil, "/v1/service_instances/id/operations/1234", nil)
+						fakeClient.UpdateInstanceReturnsOnCall(1, nil, "", nil)
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
-						fakeClient.GetInstanceByIDReturns(&types2.ServiceInstance{ServiceInstanceBase: types2.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}, nil)
+						smInstance := &smclientTypes.ServiceInstance{ServiceInstanceBase: smclientTypes.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}
+						fakeClient.GetInstanceByIDReturns(smInstance, nil)
+						fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
+							ServiceInstances: []smclientTypes.ServiceInstance{*smInstance},
+						}, nil)
 					})
-					It("should update failure condition", func() {
+					It("should recover", func() {
 						Eventually(func() bool {
 							serviceInstance.Spec = updateSpec
 							updateInstance(serviceInstance)
 							err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
-							if err != nil || len(serviceInstance.Status.Conditions) != 2 || serviceInstance.Status.Conditions[0].Reason != UpdateFailed {
-								return false
-							}
-							return true
+							Expect(err).ToNot(HaveOccurred())
+							return len(serviceInstance.Status.Conditions) == 1 || serviceInstance.Status.Conditions[0].Status == metav1.ConditionTrue
 						}, timeout, interval).Should(BeTrue())
 					})
 				})
@@ -467,7 +493,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		When("delete in SM is async", func() {
 			JustBeforeEach(func() {
 				fakeClient.DeprovisionReturns("/v1/service_instances/id/operations/1234", nil)
-				fakeClient.StatusReturns(&types2.Operation{
+				fakeClient.StatusReturns(&smclientTypes.Operation{
 					ID:    "1234",
 					Type:  string(smTypes.DELETE),
 					State: string(smTypes.IN_PROGRESS),
@@ -483,7 +509,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			})
 			When("polling ends with success", func() {
 				JustBeforeEach(func() {
-					fakeClient.StatusReturns(&types2.Operation{
+					fakeClient.StatusReturns(&smclientTypes.Operation{
 						ID:    "1234",
 						Type:  string(smTypes.DELETE),
 						State: string(smTypes.SUCCEEDED),
@@ -495,7 +521,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			})
 			When("polling ends with failure", func() {
 				JustBeforeEach(func() {
-					fakeClient.StatusReturns(&types2.Operation{
+					fakeClient.StatusReturns(&smclientTypes.Operation{
 						ID:    "1234",
 						Type:  string(smTypes.DELETE),
 						State: string(smTypes.FAILED),
