@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/Peripli/service-manager/pkg/web"
 	"github.com/go-logr/logr"
@@ -80,7 +81,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if serviceBinding.GetObservedGeneration() > 0 && !isInProgress(serviceBinding) {
-		log.Info(fmt.Sprintf("Binding already created"))
+		log.Info("Binding already created")
 		return ctrl.Result{}, nil
 	}
 
