@@ -197,7 +197,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		if createdBinding != nil {
 			secretName := createdBinding.Status.SecretName
 			fakeClient.UnbindReturns("", nil)
-			k8sClient.Delete(context.Background(), createdBinding)
+			_ = k8sClient.Delete(context.Background(), createdBinding)
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 				return apierrors.IsNotFound(err)
@@ -355,10 +355,10 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 				})
 
-				When("bind polling returns 404", func() {
+				When("bind polling returns error", func() {
 					JustBeforeEach(func() {
 						fakeClient.GetBindingByIDReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
-						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
+						fakeClient.StatusReturns(nil, fmt.Errorf("no polling for you"))
 						fakeClient.BindReturns(nil, "/v1/service_bindings/id/operations/1234", nil)
 					})
 					It("should eventually succeed", func() {
@@ -372,13 +372,6 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 				})
 			})
-
-			/*When("external name is not provided", func() {
-				It("succeeds and uses the k8s name as external name", func() {
-					createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "")
-					Expect(createdBinding.Spec.ExternalName).To(Equal(createdBinding.Name))
-				})
-			})*/
 
 			When("referenced service instance is failed", func() {
 				JustBeforeEach(func() {
@@ -475,30 +468,16 @@ var _ = Describe("ServiceBinding controller", func() {
 							smCallArgs := fakeClient.ListBindingsArgsForCall(0)
 							Expect(smCallArgs.LabelQuery).To(HaveLen(3))
 							Expect(smCallArgs.FieldQuery).To(HaveLen(1))
+							Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
 							//TODO verify correct parameters used to find binding in SM are correct
 
-							if testCase.lastOpState == smTypes.FAILED {
-								Expect(createdBinding.Status.Conditions).To(HaveLen(2))
-								Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-								Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-
-								Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
-								Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-								Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring("fake-description"))
-							} else {
-								Expect(createdBinding.Status.Conditions).To(HaveLen(1))
-								if testCase.lastOpState == smTypes.SUCCEEDED {
-									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
-									Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-
-									if testCase.lastOpType == smTypes.CREATE || testCase.lastOpType == smTypes.UPDATE {
-
-										validateSecretData(getSecret(context.Background(), createdBinding.Status.SecretName, createdBinding.Namespace), "secret_key", "secret_value")
-									}
-								} else {
-									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-									Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-								}
+							switch testCase.lastOpState {
+							case smTypes.FAILED:
+								Expect(isFailed(createdBinding))
+							case smTypes.IN_PROGRESS:
+								Expect(isInProgress(createdBinding))
+							case smTypes.SUCCEEDED:
+								Expect(isReady(createdBinding))
 							}
 						})
 					})
@@ -518,48 +497,6 @@ var _ = Describe("ServiceBinding controller", func() {
 		})
 	})
 
-	/*Context("Update", func() {
-		JustBeforeEach(func() {
-			createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name")
-			Expect(isReady(createdBinding)).To(BeTrue())
-		})
-
-		When("external name is changed", func() {
-			It("should fail", func() {
-				createdBinding.Spec.ExternalName = "new-external-name"
-				err := k8sClient.Update(context.Background(), createdBinding)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
-			})
-		})
-
-		When("service instance name is changed", func() {
-			It("should fail", func() {
-				createdBinding.Spec.ServiceInstanceName = "new-instance-name"
-				err := k8sClient.Update(context.Background(), createdBinding)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
-			})
-		})
-
-		When("parameters are changed", func() {
-			It("should fail", func() {
-				createdBinding.Spec.Parameters = &runtime.RawExtension{
-					Raw: []byte(`{"new-key": "new-value"}`),
-				}
-				err := k8sClient.Update(context.Background(), createdBinding)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
-			})
-		})
-
-		XWhen("labels are changed", func() {
-			It("should fail", func() {
-				// TODO labels
-			})
-		})
-	})
-	*/
 	Context("Delete", func() {
 		JustBeforeEach(func() {
 			createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name")
@@ -683,7 +620,6 @@ var _ = Describe("ServiceBinding controller", func() {
 			})
 		})
 	})
-
 })
 
 func validateSecretData(secret *v1.Secret, expectedKey string, expectedValue string) {
