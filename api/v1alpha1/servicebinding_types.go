@@ -79,7 +79,9 @@ type ServiceBindingStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +kubebuilder:printcolumn:JSONPath=".spec.serviceInstanceName",name="Instance",type=string
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[0].reason",name="Status",type=string
+// +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name="Age",type=date
 // ServiceBinding is the Schema for the servicebindings API
 type ServiceBinding struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -111,6 +113,14 @@ func (sb *ServiceBinding) GetStatus() interface{} {
 
 func (sb *ServiceBinding) SetStatus(status interface{}) {
 	sb.Status = status.(ServiceBindingStatus)
+}
+
+func (sb *ServiceBinding) GetObservedGeneration() int64 {
+	return sb.Status.ObservedGeneration
+}
+
+func (sb *ServiceBinding) SetObservedGeneration(newObserved int64) {
+	sb.Status.ObservedGeneration = newObserved
 }
 
 // +kubebuilder:object:root=true

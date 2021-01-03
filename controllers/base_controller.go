@@ -4,14 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/meta"
-	types2 "k8s.io/apimachinery/pkg/types"
 	"net/http"
+
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	"k8s.io/apimachinery/pkg/api/meta"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 
 	smTypes "github.com/Peripli/service-manager/pkg/types"
 	"github.com/go-logr/logr"
 	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
-	"github.com/sm-operator/sapcp-operator/internal"
 	"github.com/sm-operator/sapcp-operator/internal/config"
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	"github.com/sm-operator/sapcp-operator/internal/smclient"
@@ -38,6 +42,7 @@ const (
 	UpdateFailed = "UpdateFailed"
 	DeleteFailed = "DeleteFailed"
 
+	Blocked = "Blocked"
 	Unknown = "Unknown"
 )
 
@@ -50,7 +55,7 @@ type BaseReconciler struct {
 	SecretResolver *secrets.SecretResolver
 }
 
-func getParameters(sapResource internal.SAPCPResource) (json.RawMessage, error) {
+func getParameters(sapResource servicesv1alpha1.SAPCPResource) (json.RawMessage, error) {
 	var instanceParameters json.RawMessage
 	if sapResource.GetParameters() != nil {
 		parametersJSON, err := sapResource.GetParameters().MarshalJSON()
@@ -62,13 +67,17 @@ func getParameters(sapResource internal.SAPCPResource) (json.RawMessage, error) 
 	return instanceParameters, nil
 }
 
-func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, object internal.SAPCPResource) (smclient.Client, error) {
+func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, object servicesv1alpha1.SAPCPResource) (smclient.Client, error) {
 	if r.SMClient != nil {
 		return r.SMClient(), nil
 	}
 
 	secret, err := r.SecretResolver.GetSecretForResource(ctx, object.GetNamespace())
 	if err != nil {
+		setBlockedCondition("Secret not found", object)
+		if err := r.updateStatus(ctx, object, log); err != nil {
+			return nil, err
+		}
 		return nil, err
 	}
 
@@ -95,46 +104,48 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 	return cl, nil
 }
 
-func (r *BaseReconciler) removeFinalizer(ctx context.Context, object internal.SAPCPResource, finalizerName string) error {
-	if containsString(object.GetFinalizers(), finalizerName) {
-		finalizers := object.GetFinalizers()
-		finalizers = removeString(finalizers, finalizerName)
-		object.SetFinalizers(finalizers)
+func (r *BaseReconciler) removeFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string, log logr.Logger) error {
+	if controllerutil.ContainsFinalizer(object, finalizerName) {
+		controllerutil.RemoveFinalizer(object, finalizerName)
 		if err := r.Update(ctx, object); err != nil {
-			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+			if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
 				return client.IgnoreNotFound(err)
 			}
+			controllerutil.RemoveFinalizer(object, finalizerName)
 			if err := r.Update(ctx, object); err != nil {
 				return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
 			}
 		}
+		log.Info(fmt.Sprintf("finalizer %s added to %s", finalizerName, object.GetControllerName()))
+		return nil
 	}
 	return nil
 }
 
-func (r *BaseReconciler) addFinalizer(ctx context.Context, object internal.SAPCPResource, finalizerName string) error {
-	if !containsString(object.GetFinalizers(), finalizerName) {
-		finalizers := object.GetFinalizers()
-		finalizers = append(finalizers, finalizerName)
-		object.SetFinalizers(finalizers)
+func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alpha1.SAPCPResource, finalizerName string, log logr.Logger) error {
+	if !controllerutil.ContainsFinalizer(object, finalizerName) {
+		controllerutil.AddFinalizer(object, finalizerName)
 		if err := r.Update(ctx, object); err != nil {
-			if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
-				return fmt.Errorf("failed to fetch latest %s : %v", object.GetControllerName(), err)
+			if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+				return client.IgnoreNotFound(err)
 			}
+			controllerutil.AddFinalizer(object, finalizerName)
 			if err := r.Update(ctx, object); err != nil {
 				return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
 			}
 		}
+		log.Info(fmt.Sprintf("finalizer %s removed from %s", finalizerName, object.GetControllerName()))
+		return nil
 	}
 	return nil
 }
 
-func (r *BaseReconciler) updateStatus(ctx context.Context, object internal.SAPCPResource, log logr.Logger) error {
+func (r *BaseReconciler) updateStatus(ctx context.Context, object servicesv1alpha1.SAPCPResource, log logr.Logger) error {
 	log.Info(fmt.Sprintf("updating %s status", object.GetControllerName()))
 	if err := r.Status().Update(ctx, object); err != nil {
 		status := object.GetStatus()
 		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest %s and trying again", err.Error(), object.GetControllerName()))
-		if err := r.Get(ctx, types2.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
 			log.Error(err, fmt.Sprintf("failed to fetch latest %s", object.GetControllerName()))
 			return err
 		}
@@ -180,7 +191,7 @@ func getConditionReason(opType smTypes.OperationCategory, state smTypes.Operatio
 	return Unknown
 }
 
-func setInProgressCondition(operationType smTypes.OperationCategory, message string, object internal.SAPCPResource) {
+func setInProgressCondition(operationType smTypes.OperationCategory, message string, object servicesv1alpha1.SAPCPResource) {
 	var defaultMessage string
 	if operationType == smTypes.CREATE {
 		defaultMessage = fmt.Sprintf("%s is being created", object.GetControllerName())
@@ -203,7 +214,7 @@ func setInProgressCondition(operationType smTypes.OperationCategory, message str
 	object.SetConditions(conditions)
 }
 
-func setSuccessConditions(operationType smTypes.OperationCategory, object internal.SAPCPResource) {
+func setSuccessConditions(operationType smTypes.OperationCategory, object servicesv1alpha1.SAPCPResource) {
 	var message string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s provisioned successfully", object.GetControllerName())
@@ -222,7 +233,7 @@ func setSuccessConditions(operationType smTypes.OperationCategory, object intern
 	object.SetConditions(conditions)
 }
 
-func setFailureConditions(operationType smTypes.OperationCategory, errorMessage string, object internal.SAPCPResource) {
+func setFailureConditions(operationType smTypes.OperationCategory, errorMessage string, object servicesv1alpha1.SAPCPResource) {
 	var message string
 	if operationType == smTypes.CREATE {
 		message = fmt.Sprintf("%s create failed: %s", object.GetControllerName(), errorMessage)
@@ -248,16 +259,55 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 	object.SetConditions(conditions)
 }
 
+func setBlockedCondition(message string, object servicesv1alpha1.SAPCPResource) {
+	conditions := object.GetConditions()
+	if len(conditions) > 0 {
+		meta.RemoveStatusCondition(&conditions, servicesv1alpha1.ConditionFailed)
+	}
+	readyBlockedCondition := metav1.Condition{Type: servicesv1alpha1.ConditionReady, Status: metav1.ConditionFalse, Reason: Blocked, Message: message}
+	meta.SetStatusCondition(&conditions, readyBlockedCondition)
+	object.SetConditions(conditions)
+}
+
 func isDelete(object metav1.ObjectMeta) bool {
 	return !object.DeletionTimestamp.IsZero()
 }
 
-func ignoreFinalError(operationType smTypes.OperationCategory, err error) error {
+func isTransientError(err error) bool {
 	if smError, ok := err.(*smclient.ServiceManagerError); ok {
-		if smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusServiceUnavailable {
-			return err
-		}
+		return smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusBadGateway ||
+			smError.StatusCode == http.StatusServiceUnavailable || smError.StatusCode == http.StatusGatewayTimeout
 	}
-	//if error is final we ignore it (no point to retry)
-	return nil
+	return false
+}
+
+func (r *BaseReconciler) markAsNonTransientError(ctx context.Context, operationType smTypes.OperationCategory, message string, object servicesv1alpha1.SAPCPResource, log logr.Logger) (ctrl.Result, error) {
+	setFailureConditions(operationType, message, object)
+	log.Info(fmt.Sprintf("operation %s of %s encountered a non transient error, giving up operation :(", operationType, object.GetControllerName()))
+	object.SetObservedGeneration(object.GetGeneration())
+	err := r.updateStatus(ctx, object, log)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *BaseReconciler) markAsTransientError(ctx context.Context, operationType smTypes.OperationCategory, message string, object servicesv1alpha1.SAPCPResource, log logr.Logger) (ctrl.Result, error) {
+	setInProgressCondition(operationType, message, object)
+	if err := r.updateStatus(ctx, object, log); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	log.Info(fmt.Sprintf("operation %s of %s encountered a transient error, will try again :)", operationType, object.GetControllerName()))
+	return ctrl.Result{Requeue: true, RequeueAfter: r.Config.LongPollInterval}, nil
+}
+
+func isInProgress(object servicesv1alpha1.SAPCPResource) bool {
+	conditions := object.GetConditions()
+	if len(conditions) == 0 {
+		return false
+	}
+	return len(conditions) == 1 &&
+		conditions[0].Type == servicesv1alpha1.ConditionReady &&
+		conditions[0].Status == metav1.ConditionFalse
 }

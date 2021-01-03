@@ -4,33 +4,132 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/sm-operator/sapcp-operator/blob/master/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sm-operator/sapcp-operator)](https://goreportcard.com/report/github.com/sm-operator/sapcp-operator)
 
-## Prerequisite
+## Prerequisites
 - kubernetes cluster
 - kubectl
 - helm
 
 ## Setup
-1. install [cert-manager](https://cert-manager.io/docs/installation/kubernetes)</br>
-`kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml` </br>
-2. create service manager secret</br>
-`kubectl create secret generic sapcp-operator-secret --from-literal=clientid="< clientid >" --from-literal=clientsecret="< secret >" --from-literal=url="< sm_url >" --from-literal=subdomain="< subdomain >" --namespace=sapcp-operator-system` </br>
-e.g.</br>
-`kubectl create secret generic sapcp-operator-secret --from-literal=clientid="myclient" --from-literal=clientsecret="mysecret" --from-literal=url="https://service-manager.cfapps.sap.hana.ondemand.com" --from-literal=subdomain="MyDemoSubaccount0909" --namespace=sapcp-operator-system` </br>
-3. deploy sapcp operator on cluster</br>
-`helm install test https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz` </br>
-sapcp-operator [releases](https://github.com/sm-operator/sapcp-operator/releases)
+1. Install [cert-manager](https://cert-manager.io/docs/installation/kubernetes):
+    ```
+    kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml
+    ```
+2. Create service manager secret:
+    ```
+    kubectl create secret generic sapcp-operator-secret \
+      --from-literal=clientid="< clientid >" \
+      --from-literal=clientsecret="< secret >" \
+      --from-literal=url="< sm_url >" \
+      --from-literal=subdomain="< subdomain >" \
+      --namespace=sapcp-operator-system
+     ```
+     e.g.
+    ```
+    kubectl create secret generic sapcp-operator-secret \
+     --from-literal=clientid="myclient" \
+     --from-literal=clientsecret="mysecret" \
+     --from-literal=url="https://service-manager.cfapps.sap.hana.ondemand.com" \
+     --from-literal=subdomain="MyDemoSubaccount0909" \
+     --namespace=sapcp-operator-system
+    ```
+3. Deploy the sapcp-operator in the cluster:
+    ```
+    helm install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz
+    ```
 
+    The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)
 
 ## Local setup
 ### Create kind with local docker registry
 `./hack/kind-with-registry.sh`
 
+### Deploy locally
+```
+make docker-build
+docker tag controller:latest localhost:5000/controller:latest
+docker push localhost:5000/controller:latest
+make deploy IMG=localhost:5000/controller:latest
+```
+
 ### Run tests
 `make test`
 
-### Deploy locally
-`make docker-build` </br>
-`docker tag controller:latest localhost:5000/controller:latest` </br>
-`docker push localhost:5000/controller:latest` </br>
-`make deploy IMG=localhost:5000/controller:latest` </br>
+### SAPCP kubectl extension
+Download https://github.com/sm-operator/sapcp-operator/releases/download/${release}/kubectl-sapcp
+move its executable file to anywhere on your ``PATH``
 
+#### Usage
+```
+kubectl sapcp marketplace <namespace>
+kubectl sapcp services <namespace>
+kubectl sapcp plans <namespace>
+```
+
+## Using the SAPCP Operator
+
+#### Step 1: Creating a service instance
+
+1.  To create an instance of SAPCP, first create a `ServiceInstance` custom resource file.
+   *   `<serviceOfferingName>` is the SAPCP service that you want to create. To list SAPCP marketplace, run `kubectl sapcp marketplace`.
+   *   `<servicePlanName>` is the plan for the SAPCP service that you want to create.
+
+```yaml
+    apiVersion: services.cloud.sap.com/v1alpha1
+    kind: ServiceInstance
+    metadata:
+        name: myservice
+    spec:
+        servicePlanName: <PLAN>
+        serviceOfferingName: <SERVICE_CLASS>
+   ```
+
+2.  Create the service instance in your cluster.
+
+    ```bash
+    kubectl apply -f filepath/myservice.yaml
+    ```
+
+3.  Check that your service status is **Created** in your cluster.
+
+    ```bash
+    kubectl get serviceinstances
+    NAME        STATUS   AGE
+    myservice   Created  12s
+    ```
+
+
+#### Step 2: Binding the service instance
+
+1.  To bind your service to the cluster so that your apps can use the service, create a `ServiceBinding` custom resource, where the `serviceInstanceName` field is the name of the `ServiceInstance` custom resource that you previously created.
+
+    ```yaml
+    apiVersion: services.cloud.sap.com/v1alpha1
+    kind: ServiceBinding
+    metadata:
+        name: mybinding
+    spec:
+        serviceInstanceName: myservice
+    ```
+
+2.  Create the binding in your cluster.
+
+    ```bash
+    kubectl apply -f filepath/mybinding.yaml
+    ```
+
+3.  Check that your service status is **Created**.
+
+    ```bash
+    kubectl get service
+    NAME        INSTANCE    STATUS    AGE
+    mybinding   myservice   Created   9s
+    
+    ```
+
+4.  Check that a secret of the same name as your binding is created. The secret contains the service credentials that apps in your cluster can use to access the service.
+
+    ```bash
+    kubectl get secrets
+    NAME        TYPE     DATA   AGE
+    mybinding   Opaque   5      102s
+    ```
