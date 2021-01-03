@@ -211,9 +211,7 @@ func (client *serviceManagerClient) ListInstances(q *Parameters) (*types.Service
 // GetInstanceByID returns instance registered in the Service Manager satisfying provided queries
 func (client *serviceManagerClient) GetInstanceByID(id string, q *Parameters) (*types.ServiceInstance, error) {
 	instance := &types.ServiceInstance{}
-	err := client.get(instance, web.ServiceInstancesURL+"/"+id, &Parameters{
-		GeneralParams: q.GeneralParams,
-	})
+	err := client.get(instance, web.ServiceInstancesURL+"/"+id, q)
 
 	return instance, err
 }
@@ -229,9 +227,7 @@ func (client *serviceManagerClient) ListBindings(q *Parameters) (*types.ServiceB
 // GetBindingByID returns binding registered in the Service Manager satisfying provided queries
 func (client *serviceManagerClient) GetBindingByID(id string, q *Parameters) (*types.ServiceBinding, error) {
 	binding := &types.ServiceBinding{}
-	err := client.get(binding, web.ServiceBindingsURL+"/"+id, &Parameters{
-		GeneralParams: q.GeneralParams,
-	})
+	err := client.get(binding, web.ServiceBindingsURL+"/"+id, q)
 
 	return binding, err
 }
