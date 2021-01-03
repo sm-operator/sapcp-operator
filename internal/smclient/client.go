@@ -181,6 +181,9 @@ func (client *serviceManagerClient) Provision(instance *types.ServiceInstance, s
 	}
 	if len(location) > 0 {
 		instanceID = ExtractInstanceID(location)
+		if len(instanceID) == 0 {
+			return "", "", fmt.Errorf("failed to extract instance ID from operation URL %s", location)
+		}
 	} else if newInstance != nil {
 		instanceID = newInstance.ID
 	}

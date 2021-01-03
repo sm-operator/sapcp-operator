@@ -193,17 +193,19 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	}
 
 	if operationURL != "" {
+		var bindingID string
+		if bindingID = smclient.ExtractBindingID(operationURL); len(bindingID) == 0 {
+			return r.markAsNonTransientError(ctx, smTypes.CREATE, fmt.Sprintf("failed to extract smBinding ID from operation URL %s", operationURL), serviceBinding, log)
+		}
+		serviceBinding.Status.BindingID = bindingID
+
 		log.Info("Create smBinding request is async")
 		serviceBinding.Status.OperationURL = operationURL
 		serviceBinding.Status.OperationType = smTypes.CREATE
 		setInProgressCondition(smTypes.CREATE, "", serviceBinding)
-		serviceBinding.Status.BindingID = smclient.ExtractBindingID(operationURL)
 		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
-		}
-		if serviceBinding.Status.BindingID == "" {
-			return ctrl.Result{}, fmt.Errorf("failed to extract smBinding ID from operation URL %s", operationURL)
 		}
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	}

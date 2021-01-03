@@ -210,15 +210,11 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	}
 
 	if operationURL != "" {
+		serviceInstance.Status.InstanceID = smInstanceID
 		log.Info("Provision request is in progress")
 		serviceInstance.Status.OperationURL = operationURL
 		serviceInstance.Status.OperationType = smTypes.CREATE
 		setInProgressCondition(smTypes.CREATE, "", serviceInstance)
-		serviceInstance.Status.InstanceID = smInstanceID
-		if serviceInstance.Status.InstanceID == "" {
-			return ctrl.Result{}, fmt.Errorf("failed to extract instance ID from operation URL %s", operationURL)
-		}
-
 		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
