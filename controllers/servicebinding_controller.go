@@ -337,12 +337,13 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 		case smTypes.CREATE:
 			smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
 			if err != nil {
-				log.Error(err, "Failed to get binding from SM")
+				log.Error(err, fmt.Sprintf("binding %s succeeded but could not fetch it from SM", serviceBinding.Status.BindingID))
+				return ctrl.Result{}, err
 			}
 
 			if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-				setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-				return ctrl.Result{}, nil
+				log.Error(err, fmt.Sprintf("binding %s succeeded but could not store secret", serviceBinding.Status.BindingID))
+				return ctrl.Result{}, err
 			}
 		case smTypes.DELETE:
 			return r.removeBindingFromKubernetes(ctx, serviceBinding, log)
