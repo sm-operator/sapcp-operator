@@ -294,19 +294,6 @@ var _ = Describe("ServiceInstance controller", func() {
 				})
 			})
 		})
-
-		/*When("external name is not provided", func() {
-			It("succeeds and uses the k8s name as external name", func() {
-				withoutExternal := v1alpha1.ServiceInstanceSpec{
-					ServicePlanName:     "a-plan-name",
-					ServiceOfferingName: "an-offering-name",
-				}
-				serviceInstance = createInstance(ctx, withoutExternal)
-				Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
-				Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceName))
-				Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
-			})
-		})*/
 	})
 
 	Describe("Update", func() {
