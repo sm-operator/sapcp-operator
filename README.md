@@ -58,11 +58,11 @@ Download https://github.com/sm-operator/sapcp-operator/releases/download/${relea
 move its executable file to anywhere on your ``PATH``
 
 #### Usage
- namespace parameter indicates the namespace where to find SM secret, defaulting to default namespace 
+ namespace parameter - namespace where to find SM secret, defaulting to default namespace 
 ```
-  kubectl sapcp marketplace -n <namespace>
-  kubectl sapcp plans -n <namespace>
-  kubectl sapcp services -n <namespace>
+kubectl sapcp marketplace <namespace>
+kubectl sapcp services <namespace>
+kubectl sapcp plans <namespace>
 ```
 
 ## Using the SAPCP Operator
