@@ -257,11 +257,10 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 		log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
 		operationURL, unbindErr := smClient.Unbind(serviceBinding.Status.BindingID, nil)
 		if unbindErr != nil {
+			log.Error(unbindErr, "failed to delete binding")
 			if isTransientError(unbindErr) {
 				return r.markAsTransientError(ctx, smTypes.DELETE, unbindErr.Error(), serviceBinding, log)
 			}
-
-			log.Error(unbindErr, "failed to delete binding")
 			// if fail to delete the binding in SM, return with error
 			// so that it can be retried
 			setFailureConditions(smTypes.DELETE, unbindErr.Error(), serviceBinding)

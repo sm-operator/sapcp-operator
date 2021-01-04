@@ -203,7 +203,8 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 
 	if provisionErr != nil {
-		log.Error(err, "failed to create service instance", "servicePlanID", serviceInstance.Spec.ServicePlanID)
+		log.Error(provisionErr, "failed to create service instance", "serviceOfferingName", serviceInstance.Spec.ServiceOfferingName,
+			"servicePlanName", serviceInstance.Spec.ServicePlanName)
 		if isTransientError(provisionErr) {
 			return r.markAsTransientError(ctx, smTypes.CREATE, provisionErr.Error(), serviceInstance, log)
 		}
