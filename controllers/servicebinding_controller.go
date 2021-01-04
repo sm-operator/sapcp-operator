@@ -297,7 +297,10 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 	if statusErr != nil {
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", statusErr.Error()), "operationURL", serviceBinding.Status.OperationURL)
 		setFailureConditions(serviceBinding.Status.OperationType, statusErr.Error(), serviceBinding)
-		freshStatus := v1alpha1.ServiceBindingStatus{Conditions: serviceBinding.GetConditions()}
+		freshStatus := v1alpha1.ServiceBindingStatus{
+			Conditions: serviceBinding.GetConditions(),
+			SecretName: serviceBinding.Status.SecretName,
+		}
 		if isDelete(serviceBinding.ObjectMeta) {
 			freshStatus.BindingID = serviceBinding.Status.BindingID
 		}
@@ -428,6 +431,7 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.Serv
 	k8sBinding.Status.InstanceID = serviceInstanceID
 	k8sBinding.Status.OperationURL = ""
 	k8sBinding.Status.OperationType = ""
+	k8sBinding.Status.SecretName = k8sBinding.Name
 	switch smBinding.LastOperation.State {
 	case smTypes.PENDING:
 		fallthrough
@@ -499,6 +503,7 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 		}
 
 		// secret not found, nothing more to do
+		log.Info("secret was deleted successfully")
 		return nil
 	}
 
@@ -507,6 +512,7 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 		return err
 	}
 
+	log.Info("secret was deleted successfully")
 	return nil
 }
 
