@@ -58,6 +58,7 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	serviceInstance = serviceInstance.DeepCopy()
 
 	if len(serviceInstance.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM

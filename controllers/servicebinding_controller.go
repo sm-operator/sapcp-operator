@@ -64,6 +64,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	serviceBinding = serviceBinding.DeepCopy()
 
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
@@ -415,7 +416,7 @@ func (r *ServiceBindingReconciler) getServiceInstanceForBinding(ctx context.Cont
 		return nil, err
 	}
 
-	return serviceInstance, nil
+	return serviceInstance.DeepCopy(), nil
 }
 
 func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -499,6 +500,7 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 		// secret not found, nothing more to do
 		return nil
 	}
+	bindingSecret = bindingSecret.DeepCopy()
 
 	if err := r.Delete(ctx, bindingSecret); err != nil {
 		log.Error(err, "Failed to delete binding secret")
