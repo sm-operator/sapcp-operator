@@ -131,7 +131,8 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			// Recovery - restore binding from SM
 			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", binding.ID))
 			if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
-				if alreadyOwnedError := err.(*controllerutil.AlreadyOwnedError); alreadyOwnedError == nil {
+				if _, ok := err.(*controllerutil.AlreadyOwnedError); !ok {
+					log.Error(err, fmt.Sprintf("failed to set service instance %s as owner of binding %s", serviceInstance.Name, serviceBinding.Name))
 					return ctrl.Result{}, err
 				}
 			}
