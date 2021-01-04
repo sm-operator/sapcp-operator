@@ -119,7 +119,7 @@ func (r *BaseReconciler) removeFinalizer(ctx context.Context, object servicesv1a
 				return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
 			}
 		}
-		log.Info(fmt.Sprintf("finalizer %s added to %s", finalizerName, object.GetControllerName()))
+		log.Info(fmt.Sprintf("finalizer %s removed from %s", finalizerName, object.GetControllerName()))
 		return nil
 	}
 	return nil
@@ -137,7 +137,7 @@ func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alph
 				return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
 			}
 		}
-		log.Info(fmt.Sprintf("finalizer %s removed from %s", finalizerName, object.GetControllerName()))
+		log.Info(fmt.Sprintf("finalizer %s added to %s", finalizerName, object.GetControllerName()))
 		return nil
 	}
 	return nil

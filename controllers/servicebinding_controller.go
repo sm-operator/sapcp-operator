@@ -64,6 +64,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	serviceBinding = serviceBinding.DeepCopy()
 
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
@@ -95,7 +96,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err != nil {
 			instanceErr = fmt.Errorf("unable to find service instance %s: %s", serviceBinding.Spec.ServiceInstanceName, err.Error())
 		} else {
-			instanceErr = fmt.Errorf("service instance %s is not usable, unable to create binding %s. Will retry after %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name, r.Config.SyncPeriod.String())
+			instanceErr = fmt.Errorf("service instance %s is not usable, unable to create binding %s", serviceBinding.Spec.ServiceInstanceName, serviceBinding.Name)
 		}
 
 		setBlockedCondition(instanceErr.Error(), serviceBinding)
@@ -255,11 +256,10 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 		log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))
 		operationURL, unbindErr := smClient.Unbind(serviceBinding.Status.BindingID, nil)
 		if unbindErr != nil {
+			log.Error(unbindErr, "failed to delete binding")
 			if isTransientError(unbindErr) {
 				return r.markAsTransientError(ctx, smTypes.DELETE, unbindErr.Error(), serviceBinding, log)
 			}
-
-			log.Error(unbindErr, "failed to delete binding")
 			// if fail to delete the binding in SM, return with error
 			// so that it can be retried
 			setFailureConditions(smTypes.DELETE, unbindErr.Error(), serviceBinding)
@@ -416,7 +416,7 @@ func (r *ServiceBindingReconciler) getServiceInstanceForBinding(ctx context.Cont
 		return nil, err
 	}
 
-	return serviceInstance, nil
+	return serviceInstance.DeepCopy(), nil
 }
 
 func (r *ServiceBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -506,6 +506,7 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 		log.Info("secret was deleted successfully")
 		return nil
 	}
+	bindingSecret = bindingSecret.DeepCopy()
 
 	if err := r.Delete(ctx, bindingSecret); err != nil {
 		log.Error(err, "Failed to delete binding secret")
