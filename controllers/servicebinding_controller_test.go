@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
-	"time"
 )
 
 // +kubebuilder:docs-gen:collapse=Imports
@@ -393,7 +392,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Eventually(func() bool {
 						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
-					}, syncPeriod+time.Second, interval).Should(BeTrue())
+					}, timeout, interval).Should(BeTrue())
 				})
 			})
 
@@ -424,7 +423,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Eventually(func() bool {
 						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
-					}, pollInterval+time.Second, interval).Should(BeTrue())
+					}, timeout, interval).Should(BeTrue())
 				})
 			})
 		})

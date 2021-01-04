@@ -48,7 +48,7 @@ import (
 
 const (
 	timeout      = time.Second * 20
-	interval     = time.Millisecond * 250
+	interval     = time.Millisecond * 10
 	syncPeriod   = time.Millisecond * 250
 	pollInterval = time.Millisecond * 250
 )
