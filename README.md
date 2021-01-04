@@ -40,25 +40,25 @@
     The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)
 
 ## Local setup
-### Create kind with local docker registry
-`./hack/kind-with-registry.sh`
+### Prerequisites
+- [kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 
 ### Deploy locally
 ```
 make docker-build
-docker tag controller:latest localhost:5000/controller:latest
-docker push localhost:5000/controller:latest
-make deploy IMG=localhost:5000/controller:latest
+kind load docker-image controller:latest
+make deploy IMG=controller:latest
 ```
 
 ### Run tests
 `make test`
 
-### SAPCP kubectl extension
+### SAPCP kubectl extension (experimental) 
 Download https://github.com/sm-operator/sapcp-operator/releases/download/${release}/kubectl-sapcp
 move its executable file to anywhere on your ``PATH``
 
 #### Usage
+ namespace parameter - namespace where to find SM secret, defaulting to default namespace 
 ```
 kubectl sapcp marketplace <namespace>
 kubectl sapcp services <namespace>
