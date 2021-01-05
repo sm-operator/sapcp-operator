@@ -123,6 +123,10 @@ func (in *ServiceInstance) SetObservedGeneration(newObserved int64) {
 	in.Status.ObservedGeneration = newObserved
 }
 
+func (in *ServiceInstance) DeepClone() SAPCPResource {
+	return in.DeepCopy()
+}
+
 // +kubebuilder:object:root=true
 
 // ServiceInstanceList contains a list of ServiceInstance

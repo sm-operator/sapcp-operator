@@ -146,17 +146,10 @@ func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alph
 func (r *BaseReconciler) updateStatus(ctx context.Context, object servicesv1alpha1.SAPCPResource, log logr.Logger) error {
 	log.Info(fmt.Sprintf("updating %s status", object.GetControllerName()))
 	if err := r.Status().Update(ctx, object); err != nil {
-		status := object.GetStatus()
-		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest %s and trying again", err.Error(), object.GetControllerName()))
-		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
-			log.Error(err, fmt.Sprintf("failed to fetch latest %s", object.GetControllerName()))
-			return err
-		}
-
-		object.SetStatus(status)
-		if err := r.Status().Update(ctx, object); err != nil {
-			log.Error(err, fmt.Sprintf("unable to update %s status", object.GetControllerName()))
-			return err
+		log.Info(fmt.Sprintf("failed to update status - %s, of %s trying again with cloned status", err.Error(), object.GetControllerName()))
+		clonedObj := object.DeepClone()
+		if err := r.Status().Update(ctx, clonedObj); err != nil {
+			log.Info(fmt.Sprintf("failed to update status - %s, of %s giving up!!", err.Error(), object.GetControllerName()))
 		}
 	}
 	log.Info(fmt.Sprintf("updated %s status in k8s", object.GetControllerName()))
