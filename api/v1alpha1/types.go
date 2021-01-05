@@ -37,4 +37,5 @@ type SAPCPResource interface {
 	SetStatus(status interface{})
 	GetObservedGeneration() int64
 	SetObservedGeneration(int64)
+	DeepClone() SAPCPResource
 }

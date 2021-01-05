@@ -37,7 +37,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	servicesv1alpha1 "github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -52,7 +51,7 @@ import (
 
 const (
 	timeout      = time.Second * 20
-	interval     = time.Millisecond * 250
+	interval     = time.Millisecond * 10
 	syncPeriod   = time.Millisecond * 250
 	pollInterval = time.Millisecond * 250
 )
@@ -85,9 +84,6 @@ var _ = BeforeSuite(func(done Done) {
 	cfg, err = testEnv.Start()
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
-
-	err = v1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
 
 	err = servicesv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -156,7 +152,7 @@ var _ = BeforeSuite(func(done Done) {
 		if err != nil {
 			return err
 		}
-		conn.Close()
+		_ = conn.Close()
 		return nil
 	}, timeout, interval).Should(Succeed())
 
@@ -180,11 +176,11 @@ var _ = AfterSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 })
 
-func isReady(resource v1alpha1.SAPCPResource) bool {
+func isReady(resource servicesv1alpha1.SAPCPResource) bool {
 	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
 }
 
-func isFailed(resource v1alpha1.SAPCPResource) bool {
+func isFailed(resource servicesv1alpha1.SAPCPResource) bool {
 	return (len(resource.GetConditions()) == 2 && resource.GetConditions()[1].Status == metav1.ConditionTrue) ||
 		len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionFalse && resource.GetConditions()[0].Reason == Blocked
 }

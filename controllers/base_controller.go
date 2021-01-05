@@ -73,17 +73,20 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 	}
 
 	secret, err := r.SecretResolver.GetSecretForResource(ctx, object.GetNamespace())
-	if err != nil {
+	if err != nil || secret == nil {
 		setBlockedCondition("Secret not found", object)
 		if err := r.updateStatus(ctx, object, log); err != nil {
 			return nil, err
 		}
-		return nil, err
+		var secretResolveErr error
+		if err != nil {
+			secretResolveErr = fmt.Errorf("could not resolve SM secret: %s", err.Error())
+		} else {
+			secretResolveErr = fmt.Errorf("SM secret not found")
+		}
+		return nil, secretResolveErr
 	}
 
-	if secret == nil {
-		return nil, fmt.Errorf("cannot create SM client - secret is missing")
-	}
 	secretData := secret.Data
 	cl, err := smclient.NewClient(ctx, &smclient.ClientConfig{
 		ClientID:     string(secretData["clientid"]),
@@ -116,7 +119,7 @@ func (r *BaseReconciler) removeFinalizer(ctx context.Context, object servicesv1a
 				return fmt.Errorf("failed to remove finalizer %s : %v", finalizerName, err)
 			}
 		}
-		log.Info(fmt.Sprintf("finalizer %s removed from %s", finalizerName, object.GetControllerName()))
+		log.Info(fmt.Sprintf("removed finalizer %s from %s", finalizerName, object.GetControllerName()))
 		return nil
 	}
 	return nil
@@ -134,7 +137,7 @@ func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alph
 				return fmt.Errorf("failed to add finalizer %s : %v", finalizerName, err)
 			}
 		}
-		log.Info(fmt.Sprintf("finalizer %s added to %s", finalizerName, object.GetControllerName()))
+		log.Info(fmt.Sprintf("added finalizer %s to %s", finalizerName, object.GetControllerName()))
 		return nil
 	}
 	return nil
@@ -143,17 +146,10 @@ func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alph
 func (r *BaseReconciler) updateStatus(ctx context.Context, object servicesv1alpha1.SAPCPResource, log logr.Logger) error {
 	log.Info(fmt.Sprintf("updating %s status", object.GetControllerName()))
 	if err := r.Status().Update(ctx, object); err != nil {
-		status := object.GetStatus()
-		log.Info(fmt.Sprintf("failed to update status - %s, fetching latest %s and trying again", err.Error(), object.GetControllerName()))
-		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
-			log.Error(err, fmt.Sprintf("failed to fetch latest %s", object.GetControllerName()))
-			return err
-		}
-
-		object.SetStatus(status)
-		if err := r.Status().Update(ctx, object); err != nil {
-			log.Error(err, fmt.Sprintf("unable to update %s status", object.GetControllerName()))
-			return err
+		log.Info(fmt.Sprintf("failed to update status - %s, of %s trying again with cloned status", err.Error(), object.GetControllerName()))
+		clonedObj := object.DeepClone()
+		if err := r.Status().Update(ctx, clonedObj); err != nil {
+			log.Info(fmt.Sprintf("failed to update status - %s, of %s giving up!!", err.Error(), object.GetControllerName()))
 		}
 	}
 	log.Info(fmt.Sprintf("updated %s status in k8s", object.GetControllerName()))
