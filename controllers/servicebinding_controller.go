@@ -86,7 +86,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.GetObservedGeneration()))
+	log.Info(fmt.Sprintf("Current generation is %v and observed is %v", serviceBinding.Generation, serviceBinding.GetObservedGeneration()))
 	serviceBinding.SetObservedGeneration(serviceBinding.Generation)
 
 	log.Info("service instance name " + serviceBinding.Spec.ServiceInstanceName + " binding namespace " + serviceBinding.Namespace)
@@ -132,10 +132,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			// Recovery - restore binding from SM
 			log.Info(fmt.Sprintf("found existing smBinding in SM with id %s, updating status", binding.ID))
 			if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
-				if _, ok := err.(*controllerutil.AlreadyOwnedError); !ok {
-					log.Error(err, fmt.Sprintf("failed to set service instance %s as owner of binding %s", serviceInstance.Name, serviceBinding.Name))
-					return ctrl.Result{}, err
-				}
+				return ctrl.Result{}, err
 			}
 
 			if binding.LastOperation.Type != smTypes.CREATE || binding.LastOperation.State == smTypes.SUCCEEDED {
@@ -300,7 +297,10 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 	if statusErr != nil {
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", statusErr.Error()), "operationURL", serviceBinding.Status.OperationURL)
 		setFailureConditions(serviceBinding.Status.OperationType, statusErr.Error(), serviceBinding)
-		freshStatus := v1alpha1.ServiceBindingStatus{Conditions: serviceBinding.GetConditions()}
+		freshStatus := v1alpha1.ServiceBindingStatus{
+			Conditions: serviceBinding.GetConditions(),
+			SecretName: serviceBinding.Status.SecretName,
+		}
 		if isDelete(serviceBinding.ObjectMeta) {
 			freshStatus.BindingID = serviceBinding.Status.BindingID
 		}
@@ -337,12 +337,13 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 		case smTypes.CREATE:
 			smBinding, err := smClient.GetBindingByID(serviceBinding.Status.BindingID, nil)
 			if err != nil {
-				log.Error(err, "Failed to get binding from SM")
+				log.Error(err, fmt.Sprintf("binding %s succeeded but could not fetch it from SM", serviceBinding.Status.BindingID))
+				return ctrl.Result{}, err
 			}
 
 			if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
-				setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-				return ctrl.Result{}, nil
+				log.Error(err, fmt.Sprintf("binding %s succeeded but could not store secret", serviceBinding.Status.BindingID))
+				return ctrl.Result{}, err
 			}
 		case smTypes.DELETE:
 			return r.removeBindingFromKubernetes(ctx, serviceBinding, log)
@@ -431,6 +432,7 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.Serv
 	k8sBinding.Status.InstanceID = serviceInstanceID
 	k8sBinding.Status.OperationURL = ""
 	k8sBinding.Status.OperationType = ""
+	k8sBinding.Status.SecretName = k8sBinding.Name
 	switch smBinding.LastOperation.State {
 	case smTypes.PENDING:
 		fallthrough
@@ -477,8 +479,12 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	log.Info("Creating binding secret")
 	if err := r.Create(ctx, secret); err != nil {
-		logger.Error(err, "Failed to store binding secret")
-		return err
+		if apierrors.IsAlreadyExists(err) {
+			if err = r.Update(ctx, secret); err != nil {
+				logger.Error(err, "Failed to store binding secret")
+				return err
+			}
+		}
 	}
 
 	k8sBinding.Status.SecretName = k8sBinding.Name
@@ -498,6 +504,7 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 		}
 
 		// secret not found, nothing more to do
+		log.Info("secret was deleted successfully")
 		return nil
 	}
 	bindingSecret = bindingSecret.DeepCopy()
@@ -507,6 +514,7 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 		return err
 	}
 
+	log.Info("secret was deleted successfully")
 	return nil
 }
 

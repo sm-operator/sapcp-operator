@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
-	"time"
 )
 
 // +kubebuilder:docs-gen:collapse=Imports
@@ -86,7 +85,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		return createBindingWithoutAssertionsAndWait(ctx, name, namespace, instanceName, externalName, true)
 	}
 
-	createBindingWithError := func(ctx context.Context, name, namespace, instanceName, externalName, failureMessage string) *v1alpha1.ServiceBinding {
+	createBindingWithError := func(ctx context.Context, name, namespace, instanceName, externalName, failureMessage string) {
 		createdBinding, err := createBindingWithoutAssertions(ctx, name, namespace, instanceName, externalName)
 		if err != nil {
 			Expect(err.Error()).To(ContainSubstring(failureMessage))
@@ -96,9 +95,8 @@ var _ = Describe("ServiceBinding controller", func() {
 			Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
 			Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(failureMessage))
 		}
-
-		return nil
 	}
+
 	createBindingWithBlockedError := func(ctx context.Context, name, namespace, instanceName, externalName, failureMessage string) *v1alpha1.ServiceBinding {
 		createdBinding, err := createBindingWithoutAssertions(ctx, name, namespace, instanceName, externalName)
 		if err != nil {
@@ -198,7 +196,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		if createdBinding != nil {
 			secretName := createdBinding.Status.SecretName
 			fakeClient.UnbindReturns("", nil)
-			k8sClient.Delete(context.Background(), createdBinding)
+			_ = k8sClient.Delete(context.Background(), createdBinding)
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 				return apierrors.IsNotFound(err)
@@ -232,7 +230,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		Context("Invalid parameters", func() {
 			When("service instance name is not provided", func() {
 				It("should fail", func() {
-					createBindingWithBlockedError(context.Background(), bindingName, bindingTestNamespace, "", "",
+					createBindingWithError(context.Background(), bindingName, bindingTestNamespace, "", "",
 						"spec.serviceInstanceName in body should be at least 1 chars long")
 				})
 			})
@@ -269,17 +267,53 @@ var _ = Describe("ServiceBinding controller", func() {
 					bindingSecret := getSecret(ctx, createdBinding.Status.SecretName, createdBinding.Namespace)
 					validateSecretData(bindingSecret, "secret_key", "secret_value")
 				})
+
 				When("bind call to SM returns error", func() {
-					errorMessage := "no binding for you"
+					var errorMessage string
 
-					BeforeEach(func() {
-						fakeClient.BindReturns(nil, "", errors.New(errorMessage))
+					When("general error occurred", func() {
+						errorMessage = "no binding for you"
+						BeforeEach(func() {
+							fakeClient.BindReturns(nil, "", errors.New(errorMessage))
+						})
+
+						It("should fail with the error returned from SM", func() {
+							createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
+								errorMessage)
+						})
 					})
 
-					It("should fail with the error returned from SM", func() {
-						createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
-							errorMessage)
+					When("SM returned transient error(429)", func() {
+						BeforeEach(func() {
+							errorMessage = "too many requests"
+							fakeClient.BindReturnsOnCall(0, nil, "", &smclient.ServiceManagerError{
+								StatusCode: http.StatusTooManyRequests,
+								Message:    errorMessage,
+							})
+							fakeClient.BindReturnsOnCall(1, &smclientTypes.ServiceBinding{ID: fakeBindingID, Credentials: json.RawMessage("{\"secret_key\": \"secret_value\"}")}, "", nil)
+						})
+
+						It("should eventually succeed", func() {
+							b, err := createBindingWithoutAssertionsAndWait(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name", true)
+							Expect(err).ToNot(HaveOccurred())
+							Expect(isReady(b)).To(BeTrue())
+						})
 					})
+
+					When("SM returned non transient error(400)", func() {
+						BeforeEach(func() {
+							errorMessage = "very bad request"
+							fakeClient.BindReturnsOnCall(0, nil, "", &smclient.ServiceManagerError{
+								StatusCode: http.StatusBadRequest,
+								Message:    errorMessage,
+							})
+						})
+
+						It("should fail", func() {
+							createBindingWithError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name", errorMessage)
+						})
+					})
+
 				})
 			})
 
@@ -303,12 +337,12 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 				})
 
-				When("bind polling returns error different from 404", func() {
+				When("bind polling returns FAILED state", func() {
 					errorMessage := "no binding for you"
 
 					JustBeforeEach(func() {
 						fakeClient.StatusReturns(&smclientTypes.Operation{
-							Type:        string(smTypes.DELETE),
+							Type:        string(smTypes.CREATE),
 							State:       string(smTypes.FAILED),
 							Description: errorMessage,
 						}, nil)
@@ -319,21 +353,20 @@ var _ = Describe("ServiceBinding controller", func() {
 							errorMessage)
 					})
 				})
-				When("bind polling returns 404", func() {
+
+				When("bind polling returns error", func() {
 					JustBeforeEach(func() {
 						fakeClient.GetBindingByIDReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
-						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
+						fakeClient.StatusReturns(nil, fmt.Errorf("no polling for you"))
 						fakeClient.BindReturns(nil, "/v1/service_bindings/id/operations/1234", nil)
 					})
-					It("should not fail", func() {
+					It("should eventually succeed", func() {
 						createdBinding, err := createBindingWithoutAssertions(context.Background(), bindingName, bindingTestNamespace, instanceName, "")
 						Expect(err).ToNot(HaveOccurred())
 						Eventually(func() bool {
 							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
-							if err != nil || len(createdBinding.Status.Conditions) != 1 || createdBinding.Status.Conditions[0].Reason != Created {
-								return false
-							}
-							return true
+							Expect(err).ToNot(HaveOccurred())
+							return isReady(createdBinding)
 						}, timeout, interval).Should(BeTrue())
 					})
 				})
@@ -352,6 +385,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					err := k8sClient.Status().Update(context.Background(), createdInstance)
 					Expect(err).ToNot(HaveOccurred())
 				})
+
 				It("should retry and succeed once the instance is ready", func() {
 					// verify create fail with appropriate message
 					createBindingWithBlockedError(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name",
@@ -365,7 +399,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Eventually(func() bool {
 						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
-					}, syncPeriod+time.Second, interval).Should(BeTrue())
+					}, timeout, interval).Should(BeTrue())
 				})
 			})
 
@@ -378,6 +412,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					err := k8sClient.Status().Update(context.Background(), createdInstance)
 					Expect(err).ToNot(HaveOccurred())
 				})
+
 				It("should retry and succeed once the instance is ready", func() {
 					var err error
 
@@ -395,7 +430,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Eventually(func() bool {
 						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 						return err == nil && isReady(createdBinding)
-					}, pollInterval+time.Second, interval).Should(BeTrue())
+					}, timeout, interval).Should(BeTrue())
 				})
 			})
 		})
@@ -439,30 +474,16 @@ var _ = Describe("ServiceBinding controller", func() {
 							smCallArgs := fakeClient.ListBindingsArgsForCall(0)
 							Expect(smCallArgs.LabelQuery).To(HaveLen(3))
 							Expect(smCallArgs.FieldQuery).To(HaveLen(1))
+							Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
 							//TODO verify correct parameters used to find binding in SM are correct
 
-							if testCase.lastOpState == smTypes.FAILED {
-								Expect(createdBinding.Status.Conditions).To(HaveLen(2))
-								Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-								Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-
-								Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
-								Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-								Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring("fake-description"))
-							} else {
-								Expect(createdBinding.Status.Conditions).To(HaveLen(1))
-								if testCase.lastOpState == smTypes.SUCCEEDED {
-									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
-									Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-
-									if testCase.lastOpType == smTypes.CREATE || testCase.lastOpType == smTypes.UPDATE {
-
-										validateSecretData(getSecret(context.Background(), createdBinding.Status.SecretName, createdBinding.Namespace), "secret_key", "secret_value")
-									}
-								} else {
-									Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-									Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-								}
+							switch testCase.lastOpState {
+							case smTypes.FAILED:
+								Expect(isFailed(createdBinding))
+							case smTypes.IN_PROGRESS:
+								Expect(isInProgress(createdBinding))
+							case smTypes.SUCCEEDED:
+								Expect(isReady(createdBinding))
 							}
 						})
 					})
@@ -525,6 +546,47 @@ var _ = Describe("ServiceBinding controller", func() {
 	})
 
 	Context("Delete", func() {
+
+		validateBindingDeletion := func(binding *v1alpha1.ServiceBinding) {
+			secretName := binding.Status.SecretName
+			Expect(secretName).ToNot(BeEmpty())
+			Expect(k8sClient.Delete(context.Background(), binding)).To(Succeed())
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, binding)
+				if apierrors.IsNotFound(err) {
+					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
+					return apierrors.IsNotFound(err)
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+		}
+
+		validateBindingNotDeleted := func(binding *v1alpha1.ServiceBinding, errorMessage string) {
+			secretName := createdBinding.Status.SecretName
+			Expect(secretName).ToNot(BeEmpty())
+			Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
+
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
+				if err != nil {
+					return false
+				}
+				return len(createdBinding.Status.Conditions) == 2
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
+			Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+			Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
+			Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
+			Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(errorMessage))
+
+			err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
+			Expect(err).ToNot(HaveOccurred())
+		}
+
 		JustBeforeEach(func() {
 			createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name")
 			Expect(isReady(createdBinding)).To(BeTrue())
@@ -536,46 +598,29 @@ var _ = Describe("ServiceBinding controller", func() {
 					fakeClient.UnbindReturns("", nil)
 				})
 				It("should delete the k8s binding and secret", func() {
-					secretName := createdBinding.Status.SecretName
-					Expect(secretName).ToNot(BeEmpty())
-					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
-					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
-						if apierrors.IsNotFound(err) {
-							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
-							return apierrors.IsNotFound(err)
-						}
-						return false
-					}, timeout, interval).Should(BeTrue())
+					validateBindingDeletion(createdBinding)
 				})
 			})
 
-			When("delete in SM fails", func() {
+			When("delete in SM fails with general error", func() {
+				errorMessage := "some-error"
 				JustBeforeEach(func() {
-					fakeClient.UnbindReturns("", fmt.Errorf("some-error"))
+					fakeClient.UnbindReturns("", fmt.Errorf(errorMessage))
 				})
 
 				It("should not remove finalizer and keep the secret", func() {
-					secretName := createdBinding.Status.SecretName
-					Expect(secretName).ToNot(BeEmpty())
-					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
+					validateBindingNotDeleted(createdBinding, errorMessage)
+				})
+			})
 
-					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
-						if err != nil {
-							return false
-						}
-						return len(createdBinding.Status.Conditions) == 2
-					}, timeout, interval).Should(BeTrue())
+			When("delete in SM fails with transient error", func() {
+				JustBeforeEach(func() {
+					fakeClient.UnbindReturnsOnCall(0, "", &smclient.ServiceManagerError{StatusCode: http.StatusTooManyRequests})
+					fakeClient.UnbindReturnsOnCall(1, "", nil)
+				})
 
-					Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-					Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
-					Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring("some-error"))
-
-					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
-					Expect(err).ToNot(HaveOccurred())
+				It("should eventually succeed", func() {
+					validateBindingDeletion(createdBinding)
 				})
 			})
 		})
@@ -591,26 +636,11 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 
 				It("should delete the k8s binding and secret", func() {
-					secretName := createdBinding.Status.SecretName
-					Expect(secretName).ToNot(BeEmpty())
-					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
-
-					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
-					Expect(err).ToNot(HaveOccurred())
-
-					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
-						if apierrors.IsNotFound(err) {
-							err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
-							return apierrors.IsNotFound(err)
-						}
-
-						return false
-					}, timeout, interval).Should(BeTrue())
+					validateBindingDeletion(createdBinding)
 				})
 			})
 
-			When("polling ends with failure", func() {
+			When("polling ends with FAILED state", func() {
 				errorMessage := "delete-binding-async-error"
 				JustBeforeEach(func() {
 					fakeClient.StatusReturns(&smclientTypes.Operation{
@@ -619,35 +649,27 @@ var _ = Describe("ServiceBinding controller", func() {
 						Description: errorMessage,
 					}, nil)
 				})
+
 				It("should not delete the k8s binding and secret", func() {
-					secretName := createdBinding.Status.SecretName
-					Expect(secretName).ToNot(BeEmpty())
-					Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
+					validateBindingNotDeleted(createdBinding, errorMessage)
+				})
+			})
 
-					err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
-					Expect(err).ToNot(HaveOccurred())
+			When("polling returns error", func() {
 
-					Eventually(func() bool {
-						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
-						if err != nil {
-							return false
-						}
-						return len(createdBinding.Status.Conditions) == 2
-					}, timeout, interval).Should(BeTrue())
+				JustBeforeEach(func() {
+					fakeClient.UnbindReturnsOnCall(0, smclient.BuildOperationURL("an-operation-id", fakeBindingID, web.ServiceBindingsURL), nil)
+					fakeClient.StatusReturns(nil, fmt.Errorf("no polling for you"))
+					fakeClient.GetBindingByIDReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
+					fakeClient.UnbindReturnsOnCall(1, "", nil)
+				})
 
-					Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-					Expect(createdBinding.Status.Conditions[1].Reason).To(Equal(getConditionReason(smTypes.DELETE, smTypes.FAILED)))
-					Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
-					Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(errorMessage))
-
-					err = k8sClient.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: bindingTestNamespace}, &v1.Secret{})
-					Expect(err).ToNot(HaveOccurred())
+				It("should recover and eventually succeed", func() {
+					validateBindingDeletion(createdBinding)
 				})
 			})
 		})
 	})
-
 })
 
 func validateSecretData(secret *v1.Secret, expectedKey string, expectedValue string) {

@@ -123,6 +123,10 @@ func (sb *ServiceBinding) SetObservedGeneration(newObserved int64) {
 	sb.Status.ObservedGeneration = newObserved
 }
 
+func (sb *ServiceBinding) DeepClone() SAPCPResource {
+	return sb.DeepCopy()
+}
+
 // +kubebuilder:object:root=true
 
 // ServiceBindingList contains a list of ServiceBinding
