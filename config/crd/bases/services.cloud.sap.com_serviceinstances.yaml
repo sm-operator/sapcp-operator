@@ -52,13 +52,6 @@ spec:
             externalName:
               description: The name of the instance in Service Manager
               type: string
-            labels:
-              additionalProperties:
-                items:
-                  type: string
-                type: array
-              description: Custom instance labels stored in Service Manager
-              type: object
             parameters:
               description: Provisioning parameters for the instance
               type: object

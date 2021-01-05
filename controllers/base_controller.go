@@ -25,10 +25,9 @@ import (
 )
 
 const (
-	subaccountIDLabel = "subaccount_id"
-	namespaceLabel    = "_namespace"
-	k8sNameLabel      = "_k8sname"
-	clusterIDLabel    = "_clusterid"
+	namespaceLabel = "_namespace"
+	k8sNameLabel   = "_k8sname"
+	clusterIDLabel = "_clusterid"
 
 	Created = "Created"
 	Updated = "Updated"

@@ -93,7 +93,7 @@ var _ = Describe("ServiceInstance controller", func() {
 		fakeClient = &smclientfakes.FakeClient{}
 		fakeClient.ProvisionReturns(fakeInstanceID, "", nil)
 		fakeClient.DeprovisionReturns("", nil)
-		fakeClient.GetInstanceByIDReturns(&smclientTypes.ServiceInstance{ServiceInstanceBase: smclientTypes.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}}, nil)
+		fakeClient.GetInstanceByIDReturns(&smclientTypes.ServiceInstance{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
 	})
 
 	AfterEach(func() {
@@ -268,11 +268,9 @@ var _ = Describe("ServiceInstance controller", func() {
 					fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
 						ServiceInstances: []smclientTypes.ServiceInstance{
 							{
-								ServiceInstanceBase: smclientTypes.ServiceInstanceBase{
-									ID:            fakeInstanceID,
-									Name:          fakeInstanceName,
-									LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
-								},
+								ID:            fakeInstanceID,
+								Name:          fakeInstanceName,
+								LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
 							},
 						},
 					}, nil)
@@ -489,7 +487,7 @@ var _ = Describe("ServiceInstance controller", func() {
 						fakeClient.UpdateInstanceReturnsOnCall(0, nil, "/v1/service_instances/id/operations/1234", nil)
 						fakeClient.UpdateInstanceReturnsOnCall(1, nil, "", nil)
 						fakeClient.StatusReturns(nil, &smclient.ServiceManagerError{StatusCode: http.StatusNotFound})
-						smInstance := &smclientTypes.ServiceInstance{ServiceInstanceBase: smclientTypes.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}
+						smInstance := &smclientTypes.ServiceInstance{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}
 						fakeClient.GetInstanceByIDReturns(smInstance, nil)
 						fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
 							ServiceInstances: []smclientTypes.ServiceInstance{*smInstance},

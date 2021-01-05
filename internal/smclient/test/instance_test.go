@@ -12,27 +12,22 @@ import (
 )
 
 var (
-	instanceBase types.ServiceInstanceBase
-	instance     *types.ServiceInstance
-	serviceID    = "service_id"
-	serviceName  = "mongo"
-	planName     = "small"
-	planID       = "service_plan_id"
+	instance    *types.ServiceInstance
+	serviceID   = "service_id"
+	serviceName = "mongo"
+	planName    = "small"
+	planID      = "service_plan_id"
 )
 
 var _ = Describe("Instance test", func() {
 
 	BeforeEach(func() {
-		instanceBase = types.ServiceInstanceBase{
+		instance = &types.ServiceInstance{
 			ID:            "instanceID",
 			Name:          "instance1",
 			ServicePlanID: planID,
 			PlatformID:    "platform_id",
 			Context:       json.RawMessage("{}"),
-		}
-
-		instance = &types.ServiceInstance{
-			ServiceInstanceBase: instanceBase,
 		}
 		instancesArray := []types.ServiceInstance{*instance}
 		instances := types.ServiceInstances{ServiceInstances: instancesArray}
@@ -427,10 +422,7 @@ var _ = Describe("Instance test", func() {
 	})
 
 	Describe("Update", func() {
-		var instanceToUpdate *types.ServiceInstanceUpdate
 		BeforeEach(func() {
-			instanceToUpdate = &types.ServiceInstanceUpdate{ServiceInstanceBase: instanceBase}
-
 			offering := &types.ServiceOffering{
 				ID:          "service_id",
 				Name:        serviceName,
@@ -461,7 +453,7 @@ var _ = Describe("Instance test", func() {
 					HandlerDetails{Method: http.MethodPatch, Path: web.ServiceInstancesURL + "/" + instance.ID, ResponseBody: responseBody, ResponseStatusCode: http.StatusOK})
 			})
 			It("should update successfully", func() {
-				responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, serviceName, planName, params)
+				responseInstance, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(location).Should(HaveLen(0))
@@ -477,7 +469,7 @@ var _ = Describe("Instance test", func() {
 					HandlerDetails{Method: http.MethodPatch, Path: web.ServiceInstancesURL + "/" + instance.ID, ResponseStatusCode: http.StatusAccepted, Headers: map[string]string{"Location": locationHeader}})
 			})
 			It("should receive operation location", func() {
-				responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, serviceName, planName, params)
+				responseInstance, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(location).Should(Equal(locationHeader))
@@ -496,7 +488,7 @@ var _ = Describe("Instance test", func() {
 					HandlerDetails{Method: http.MethodPatch, Path: web.ServiceInstancesURL + "/" + instance.ID, ResponseBody: responseBody, ResponseStatusCode: http.StatusOK})
 			})
 			It("should return error", func() {
-				responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, serviceName, planName, params)
+				responseInstance, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 				Expect(err).Should(HaveOccurred())
 				Expect(location).Should(BeEmpty())
@@ -512,7 +504,7 @@ var _ = Describe("Instance test", func() {
 						HandlerDetails{Method: http.MethodPatch, Path: web.ServiceInstancesURL + "/" + instance.ID, ResponseBody: responseBody, ResponseStatusCode: http.StatusTeapot})
 				})
 				It("should return error with status code", func() {
-					responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, serviceName, planName, params)
+					responseInstance, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 					Expect(err).Should(HaveOccurred())
 					Expect(location).Should(BeEmpty())
@@ -528,7 +520,7 @@ var _ = Describe("Instance test", func() {
 						HandlerDetails{Method: http.MethodPatch, Path: web.ServiceInstancesURL + "/" + instance.ID, ResponseBody: responseBody, ResponseStatusCode: http.StatusBadRequest})
 				})
 				It("should return error with url and description", func() {
-					responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, serviceName, planName, params)
+					responseInstance, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 					Expect(err).Should(HaveOccurred())
 					Expect(location).Should(BeEmpty())
@@ -544,7 +536,7 @@ var _ = Describe("Instance test", func() {
 						HandlerDetails{Method: http.MethodPatch, Path: web.ServiceInstancesURL + "/" + instance.ID, ResponseBody: responseBody, ResponseStatusCode: http.StatusBadRequest})
 				})
 				It("should return error without url and description if invalid response body", func() {
-					responseInstance, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, serviceName, planName, params)
+					responseInstance, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 					Expect(err).Should(HaveOccurred())
 					Expect(location).Should(BeEmpty())
@@ -559,7 +551,7 @@ var _ = Describe("Instance test", func() {
 		Context("When invalid config is set", func() {
 			It("should return error", func() {
 				client, _ = smclient.NewClient(context.TODO(), &smclient.ClientConfig{URL: "invalidURL"}, fakeAuthClient)
-				_, location, err := client.UpdateInstance(instance.ID, instanceToUpdate, serviceName, planName, params)
+				_, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 				Expect(err).Should(HaveOccurred())
 				Expect(location).Should(BeEmpty())

@@ -46,7 +46,7 @@ type Client interface {
 
 	ListInstances(*Parameters) (*types.ServiceInstances, error)
 	GetInstanceByID(string, *Parameters) (*types.ServiceInstance, error)
-	UpdateInstance(id string, updatedInstance *types.ServiceInstanceUpdate, serviceName string, planName string, q *Parameters) (*types.ServiceInstance, string, error)
+	UpdateInstance(id string, updatedInstance *types.ServiceInstance, serviceName string, planName string, q *Parameters) (*types.ServiceInstance, string, error)
 	Provision(*types.ServiceInstance, string, string, *Parameters) (string, string, error)
 	Deprovision(string, *Parameters) (string, error)
 
@@ -247,7 +247,7 @@ func (client *serviceManagerClient) Unbind(id string, q *Parameters) (string, er
 	return client.delete(web.ServiceBindingsURL+"/"+id, q)
 }
 
-func (client *serviceManagerClient) UpdateInstance(id string, updatedInstance *types.ServiceInstanceUpdate, serviceName string, planName string, q *Parameters) (*types.ServiceInstance, string, error) {
+func (client *serviceManagerClient) UpdateInstance(id string, updatedInstance *types.ServiceInstance, serviceName string, planName string, q *Parameters) (*types.ServiceInstance, string, error) {
 	var result *types.ServiceInstance
 
 	planID, err := client.getAndValidatePlanID(updatedInstance.ServicePlanID, serviceName, planName)

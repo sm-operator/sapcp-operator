@@ -22,7 +22,8 @@ import (
 	"github.com/Peripli/service-manager/pkg/types"
 )
 
-type ServiceInstanceBase struct {
+// ServiceInstance defines the data of a service instance.
+type ServiceInstance struct {
 	ID        string `json:"id,omitempty" yaml:"id,omitempty"`
 	Name      string `json:"name,omitempty" yaml:"name,omitempty"`
 	CreatedAt string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
@@ -32,7 +33,9 @@ type ServiceInstanceBase struct {
 	ServicePlanID string `json:"service_plan_id,omitempty" yaml:"service_plan_id,omitempty"`
 	PlatformID    string `json:"platform_id,omitempty" yaml:"platform_id,omitempty"`
 
-	Parameters      json.RawMessage `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+	Parameters json.RawMessage `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+	Labels     types.Labels    `json:"labels,omitempty" yaml:"labels,omitempty"`
+
 	MaintenanceInfo json.RawMessage `json:"maintenance_info,omitempty" yaml:"-"`
 	Context         json.RawMessage `json:"context,omitempty" yaml:"context,omitempty"`
 	PreviousValues  json.RawMessage `json:"-" yaml:"-"`
@@ -41,17 +44,6 @@ type ServiceInstanceBase struct {
 	Usable bool `json:"usable" yaml:"usable"`
 
 	LastOperation *types.Operation `json:"last_operation,omitempty" yaml:"last_operation,omitempty"`
-}
-
-// ServiceInstance defines the data of a service instance.
-type ServiceInstance struct {
-	ServiceInstanceBase
-	Labels types.Labels `json:"labels,omitempty" yaml:"labels,omitempty"`
-}
-
-type ServiceInstanceUpdate struct {
-	ServiceInstanceBase
-	Labels types.LabelChanges `json:"labels,omitempty" yaml:"labels,omitempty"`
 }
 
 // ServiceInstances wraps an array of service instances

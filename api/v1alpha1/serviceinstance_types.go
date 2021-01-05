@@ -48,10 +48,6 @@ type ServiceInstanceSpec struct {
 	// Provisioning parameters for the instance
 	// +optional
 	Parameters *runtime.RawExtension `json:"parameters,omitempty"`
-
-	// Custom instance labels stored in Service Manager
-	// +optional
-	Labels types.Labels `json:"labels,omitempty"`
 }
 
 // ServiceInstanceStatus defines the observed state of ServiceInstance

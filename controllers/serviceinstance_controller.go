@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -191,11 +190,9 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	}
 
 	smInstanceID, operationURL, provisionErr := smClient.Provision(&types.ServiceInstance{
-		ServiceInstanceBase: types.ServiceInstanceBase{
-			Name:          serviceInstance.Spec.ExternalName,
-			ServicePlanID: serviceInstance.Spec.ServicePlanID,
-			Parameters:    instanceParameters,
-		},
+		Name:          serviceInstance.Spec.ExternalName,
+		ServicePlanID: serviceInstance.Spec.ServicePlanID,
+		Parameters:    instanceParameters,
 		Labels: smTypes.Labels{
 			namespaceLabel: []string{serviceInstance.Namespace},
 			k8sNameLabel:   []string{serviceInstance.Name},
@@ -236,19 +233,6 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 
 func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
 	var err error
-	var smServiceInstance *types.ServiceInstance
-	if smServiceInstance, err = smClient.GetInstanceByID(serviceInstance.Status.InstanceID, nil); err != nil {
-		if smErr, ok := err.(*smclient.ServiceManagerError); ok && smErr.StatusCode == http.StatusNotFound {
-			log.Info(fmt.Sprintf("instance ID %s not found in SM, recreating...", serviceInstance.Status.InstanceID))
-			serviceInstance.Status.InstanceID = ""
-		}
-		log.Error(err, "failed to fetch service instance from SM")
-		setFailureConditions(smTypes.UPDATE, fmt.Sprintf("could not fetch instance from SM: %v", err), serviceInstance)
-		if updateStatusErr := r.updateStatus(ctx, serviceInstance, log); updateStatusErr != nil {
-			return ctrl.Result{}, updateStatusErr
-		}
-		return ctrl.Result{}, err
-	}
 
 	log.Info("updating instance in SM")
 	instanceParameters, err := getParameters(serviceInstance)
@@ -256,15 +240,11 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 		log.Error(err, "failed to parse instance parameters")
 		return r.markAsNonTransientError(ctx, smTypes.UPDATE, fmt.Sprintf("failed to parse parameters: %v", err.Error()), serviceInstance, log)
 	}
-	instanceLabels := getInstanceLabelsForUpdate(serviceInstance, smServiceInstance)
 
-	_, operationURL, err := smClient.UpdateInstance(serviceInstance.Status.InstanceID, &types.ServiceInstanceUpdate{
-		ServiceInstanceBase: types.ServiceInstanceBase{
-			Name:          serviceInstance.Spec.ExternalName,
-			ServicePlanID: serviceInstance.Spec.ServicePlanID,
-			Parameters:    instanceParameters,
-		},
-		Labels: instanceLabels,
+	_, operationURL, err := smClient.UpdateInstance(serviceInstance.Status.InstanceID, &types.ServiceInstance{
+		Name:          serviceInstance.Spec.ExternalName,
+		ServicePlanID: serviceInstance.Spec.ServicePlanID,
+		Parameters:    instanceParameters,
 	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
@@ -399,70 +379,4 @@ func (r *ServiceInstanceReconciler) getInstanceForRecovery(smClient smclient.Cli
 	}
 	log.Info("instance not found in SM")
 	return nil, nil
-}
-
-func getInstanceLabelsForUpdate(k8sServiceInstance *servicesv1alpha1.ServiceInstance, smServiceInstance *types.ServiceInstance) smTypes.LabelChanges {
-	labelChanges := smTypes.LabelChanges{}
-	contains := func(s []string, e string) bool {
-		for _, a := range s {
-			if a == e {
-				return true
-			}
-		}
-		return false
-	}
-
-	labelValuesAdd := make([]string, 0)
-	labelValuesRemove := make([]string, 0)
-	for key, smValues := range smServiceInstance.Labels {
-		if key == subaccountIDLabel || key == namespaceLabel || key == k8sNameLabel || key == clusterIDLabel || key == "container_id" { //TODO remove container ID once SM is ready with the new plan
-			continue
-		}
-		if k8sServiceInstance.Spec.Labels[key] == nil {
-			//delete label
-			labelChanges = append(labelChanges, &smTypes.LabelChange{
-				Operation: smTypes.RemoveLabelOperation,
-				Key:       key,
-			})
-		} else {
-			//update label values
-			for _, k8sValue := range k8sServiceInstance.Spec.Labels[key] {
-				if !contains(smServiceInstance.Labels[key], k8sValue) {
-					labelValuesAdd = append(labelValuesAdd, k8sValue)
-				}
-			}
-			if len(labelValuesAdd) > 0 {
-				labelChanges = append(labelChanges, &smTypes.LabelChange{
-					Operation: smTypes.AddLabelValuesOperation,
-					Key:       key,
-					Values:    labelValuesAdd,
-				})
-			}
-
-			for _, smValue := range smValues {
-				if !contains(k8sServiceInstance.Spec.Labels[key], smValue) {
-					labelValuesRemove = append(labelValuesRemove, smValue)
-				}
-			}
-			if len(labelValuesRemove) > 0 {
-				labelChanges = append(labelChanges, &smTypes.LabelChange{
-					Operation: smTypes.RemoveLabelValuesOperation,
-					Key:       key,
-					Values:    labelValuesRemove,
-				})
-			}
-		}
-	}
-
-	for key, k8sValues := range k8sServiceInstance.Spec.Labels {
-		if smServiceInstance.Labels[key] == nil {
-			//add label
-			labelChanges = append(labelChanges, &smTypes.LabelChange{
-				Operation: smTypes.AddLabelOperation,
-				Key:       key,
-				Values:    k8sValues,
-			})
-		}
-	}
-	return labelChanges
 }
