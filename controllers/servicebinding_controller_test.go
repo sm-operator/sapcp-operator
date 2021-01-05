@@ -188,7 +188,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			},
 		}, nil)
 
-		smInstance := &smclientTypes.ServiceInstance{ServiceInstanceBase: smclientTypes.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}
+		smInstance := &smclientTypes.ServiceInstance{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}
 		fakeClient.GetInstanceByIDReturns(smInstance, nil)
 	})
 
@@ -435,72 +435,6 @@ var _ = Describe("ServiceBinding controller", func() {
 			})
 		})
 
-		Context("Recovery", func() {
-			type recoveryTestCase struct {
-				lastOpType  smTypes.OperationCategory
-				lastOpState smTypes.OperationState
-			}
-			executeTestCase := func(testCase recoveryTestCase) {
-				fakeBinding := func(state smTypes.OperationState) *smclientTypes.ServiceBinding {
-					return &smclientTypes.ServiceBinding{
-						ID:          fakeBindingID,
-						Name:        "fake-binding-external-name",
-						Credentials: json.RawMessage("{\"secret_key\": \"secret_value\"}"),
-						LastOperation: &smTypes.Operation{
-							Type:        testCase.lastOpType,
-							State:       state,
-							Description: "fake-description",
-						},
-					}
-				}
-
-				When("binding exists in SM", func() {
-					JustBeforeEach(func() {
-						fakeClient.ListBindingsReturnsOnCall(0,
-							&smclientTypes.ServiceBindings{
-								ServiceBindings: []smclientTypes.ServiceBinding{*fakeBinding(testCase.lastOpState)},
-							}, nil)
-						fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.IN_PROGRESS)}, nil)
-					})
-					JustAfterEach(func() {
-						fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.SUCCEEDED)}, nil)
-						fakeClient.GetBindingByIDReturns(fakeBinding(smTypes.SUCCEEDED), nil)
-					})
-					When(fmt.Sprintf("last operation is %s %s", testCase.lastOpType, testCase.lastOpState), func() {
-						It("should resync status", func() {
-							var err error
-							createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, bindingTestNamespace, instanceName, "fake-binding-external-name", false)
-							Expect(err).ToNot(HaveOccurred())
-							smCallArgs := fakeClient.ListBindingsArgsForCall(0)
-							Expect(smCallArgs.LabelQuery).To(HaveLen(3))
-							Expect(smCallArgs.FieldQuery).To(HaveLen(1))
-							Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-							//TODO verify correct parameters used to find binding in SM are correct
-
-							switch testCase.lastOpState {
-							case smTypes.FAILED:
-								Expect(isFailed(createdBinding))
-							case smTypes.IN_PROGRESS:
-								Expect(isInProgress(createdBinding))
-							case smTypes.SUCCEEDED:
-								Expect(isReady(createdBinding))
-							}
-						})
-					})
-				})
-			}
-
-			for _, testCase := range []recoveryTestCase{
-				{lastOpType: smTypes.CREATE, lastOpState: smTypes.SUCCEEDED},
-				{lastOpType: smTypes.CREATE, lastOpState: smTypes.IN_PROGRESS},
-				{lastOpType: smTypes.CREATE, lastOpState: smTypes.FAILED},
-				{lastOpType: smTypes.DELETE, lastOpState: smTypes.SUCCEEDED},
-				{lastOpType: smTypes.DELETE, lastOpState: smTypes.IN_PROGRESS},
-				{lastOpType: smTypes.DELETE, lastOpState: smTypes.FAILED},
-			} {
-				executeTestCase(testCase)
-			}
-		})
 	})
 
 	Context("Update", func() {
@@ -538,11 +472,6 @@ var _ = Describe("ServiceBinding controller", func() {
 			})
 		})
 
-		XWhen("labels are changed", func() {
-			It("should fail", func() {
-				// TODO labels
-			})
-		})
 	})
 
 	Context("Delete", func() {
@@ -669,6 +598,73 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 			})
 		})
+	})
+
+	Context("Recovery", func() {
+		type recoveryTestCase struct {
+			lastOpType  smTypes.OperationCategory
+			lastOpState smTypes.OperationState
+		}
+		executeTestCase := func(testCase recoveryTestCase) {
+			fakeBinding := func(state smTypes.OperationState) *smclientTypes.ServiceBinding {
+				return &smclientTypes.ServiceBinding{
+					ID:          fakeBindingID,
+					Name:        "fake-binding-external-name",
+					Credentials: json.RawMessage("{\"secret_key\": \"secret_value\"}"),
+					LastOperation: &smTypes.Operation{
+						Type:        testCase.lastOpType,
+						State:       state,
+						Description: "fake-description",
+					},
+				}
+			}
+
+			When("binding exists in SM", func() {
+				JustBeforeEach(func() {
+					fakeClient.ListBindingsReturnsOnCall(0,
+						&smclientTypes.ServiceBindings{
+							ServiceBindings: []smclientTypes.ServiceBinding{*fakeBinding(testCase.lastOpState)},
+						}, nil)
+					fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.IN_PROGRESS)}, nil)
+				})
+				JustAfterEach(func() {
+					fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.SUCCEEDED)}, nil)
+					fakeClient.GetBindingByIDReturns(fakeBinding(smTypes.SUCCEEDED), nil)
+				})
+				When(fmt.Sprintf("last operation is %s %s", testCase.lastOpType, testCase.lastOpState), func() {
+					It("should resync status", func() {
+						var err error
+						createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, bindingTestNamespace, instanceName, "fake-binding-external-name", false)
+						Expect(err).ToNot(HaveOccurred())
+						smCallArgs := fakeClient.ListBindingsArgsForCall(0)
+						Expect(smCallArgs.LabelQuery).To(HaveLen(3))
+						Expect(smCallArgs.FieldQuery).To(HaveLen(1))
+						Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
+						//TODO verify correct parameters used to find binding in SM are correct
+
+						switch testCase.lastOpState {
+						case smTypes.FAILED:
+							Expect(isFailed(createdBinding))
+						case smTypes.IN_PROGRESS:
+							Expect(isInProgress(createdBinding))
+						case smTypes.SUCCEEDED:
+							Expect(isReady(createdBinding))
+						}
+					})
+				})
+			})
+		}
+
+		for _, testCase := range []recoveryTestCase{
+			{lastOpType: smTypes.CREATE, lastOpState: smTypes.SUCCEEDED},
+			{lastOpType: smTypes.CREATE, lastOpState: smTypes.IN_PROGRESS},
+			{lastOpType: smTypes.CREATE, lastOpState: smTypes.FAILED},
+			{lastOpType: smTypes.DELETE, lastOpState: smTypes.SUCCEEDED},
+			{lastOpType: smTypes.DELETE, lastOpState: smTypes.IN_PROGRESS},
+			{lastOpType: smTypes.DELETE, lastOpState: smTypes.FAILED},
+		} {
+			executeTestCase(testCase)
+		}
 	})
 })
 
