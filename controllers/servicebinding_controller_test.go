@@ -356,13 +356,14 @@ var _ = Describe("ServiceBinding controller", func() {
 
 				When("bind polling returns error", func() {
 					JustBeforeEach(func() {
-						fakeClient.GetBindingByIDReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
 						fakeClient.StatusReturns(nil, fmt.Errorf("no polling for you"))
 						fakeClient.BindReturns(nil, "/v1/service_bindings/id/operations/1234", nil)
 					})
 					It("should eventually succeed", func() {
 						createdBinding, err := createBindingWithoutAssertions(context.Background(), bindingName, bindingTestNamespace, instanceName, "")
 						Expect(err).ToNot(HaveOccurred())
+						fakeClient.GetBindingByIDReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
+
 						Eventually(func() bool {
 							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
 							Expect(err).ToNot(HaveOccurred())
