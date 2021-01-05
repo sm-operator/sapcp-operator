@@ -205,8 +205,7 @@ var _ = Describe("ServiceInstance controller", func() {
 						Eventually(func() bool {
 							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance)
 							Expect(err).ToNot(HaveOccurred())
-							isReady := len(serviceInstance.Status.Conditions) == 1
-							return isReady
+							return isReady(serviceInstance)
 						}, timeout, interval).Should(BeTrue())
 
 						Expect(len(serviceInstance.Status.Conditions)).To(Equal(1))
