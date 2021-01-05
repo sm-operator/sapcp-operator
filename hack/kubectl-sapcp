@@ -64,26 +64,46 @@ _token() {
 }
 
 usage="kubectl extension to access SAPCP services
-
+namespace parameter indicates the namespace where SM secret can be found
 Usage:
-  kubectl sapcp marketplace <namespace>
-  kubectl sapcp plans <namespace>
-  kubectl sapcp services <namespace>
+  kubectl sapcp marketplace -n <namespace>
+  kubectl sapcp plans -n <namespace>
+  kubectl sapcp services -n <namespace>
 
 "
-
 
 if [ "$#" -lt 1 ]; then
   echo "$usage"
   exit 1
 fi
 
-namespace=${2:-"default"}
-if [[ "$1" == "marketplace" ]]; then
+namespace="default"
+command=$1
+shift
+
+while test $# -gt 0; do
+  case "$1" in
+    -n)
+      shift
+      if test $# -gt 0; then
+        export namespace=$1
+      else
+        echo "no namespace specified"
+        exit 1
+      fi
+      shift
+      ;;
+    *)
+    echo "$usage"
+    exit 1
+  esac
+done
+
+if [[ "$command" == "marketplace" ]]; then
   marketplace "$namespace"
-elif  [[ "$1" == "plans" ]]; then
+elif  [[ "$command" == "plans" ]]; then
    plans "$namespace"
-elif  [[ "$1" == "services" ]]; then
+elif  [[ "$command" == "services" ]]; then
    services "$namespace"
 else
   echo "$usage"
