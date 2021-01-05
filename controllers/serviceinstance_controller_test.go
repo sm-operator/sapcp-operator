@@ -359,7 +359,7 @@ var _ = Describe("ServiceInstance controller", func() {
 				When("spec is changed", func() {
 					BeforeEach(func() {
 						fakeClient.UpdateInstanceReturns(nil, "/v1/service_instances/id/operations/1234", nil)
-						fakeClient.StatusReturnsOnCall(0, &smclientTypes.Operation{
+						fakeClient.StatusReturns(&smclientTypes.Operation{
 							ID:    "1234",
 							Type:  string(smTypes.UPDATE),
 							State: string(smTypes.IN_PROGRESS),
@@ -383,13 +383,6 @@ var _ = Describe("ServiceInstance controller", func() {
 					})
 
 					When("updating during update", func() {
-						JustBeforeEach(func() {
-							fakeClient.StatusReturns(&smclientTypes.Operation{
-								ID:    "1234",
-								Type:  string(smTypes.UPDATE),
-								State: string(smTypes.IN_PROGRESS),
-							}, nil)
-						})
 						It("should save the latest spec", func() {
 							By("updating first time")
 							serviceInstance.Spec = updateSpec()
@@ -414,14 +407,6 @@ var _ = Describe("ServiceInstance controller", func() {
 					})
 
 					When("deleting during update", func() {
-						JustBeforeEach(func() {
-							fakeClient.StatusReturns(&smclientTypes.Operation{
-								ID:    "1234",
-								Type:  string(smTypes.UPDATE),
-								State: string(smTypes.IN_PROGRESS),
-							}, nil)
-						})
-
 						It("should be deleted", func() {
 							serviceInstance.Spec = updateSpec()
 							updatedInstance := updateInstance(serviceInstance)
