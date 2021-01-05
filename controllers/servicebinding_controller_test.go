@@ -539,11 +539,6 @@ var _ = Describe("ServiceBinding controller", func() {
 			})
 		})
 
-		XWhen("labels are changed", func() {
-			It("should fail", func() {
-				// TODO labels
-			})
-		})
 	})
 
 	Context("Delete", func() {
