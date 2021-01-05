@@ -125,6 +125,9 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, err
 		}
 		binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
+		if binding == nil {
+			log.Info("getBindingForRecovery returned nil")
+		}
 		if err != nil {
 			log.Error(err, "failed to list bindings from SM")
 		}
