@@ -190,7 +190,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			},
 		}, nil)
 
-		smInstance := &smclientTypes.ServiceInstance{ServiceInstanceBase: smclientTypes.ServiceInstanceBase{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}}
+		smInstance := &smclientTypes.ServiceInstance{ID: fakeInstanceID, Ready: true, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.UPDATE}}
 		fakeClient.GetInstanceByIDReturns(smInstance, nil)
 	})
 

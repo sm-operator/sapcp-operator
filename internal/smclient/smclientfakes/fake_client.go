@@ -196,11 +196,11 @@ type FakeClient struct {
 		result1 string
 		result2 error
 	}
-	UpdateInstanceStub        func(string, *types.ServiceInstanceUpdate, string, string, *smclient.Parameters) (*types.ServiceInstance, string, error)
+	UpdateInstanceStub        func(string, *types.ServiceInstance, string, string, *smclient.Parameters) (*types.ServiceInstance, string, error)
 	updateInstanceMutex       sync.RWMutex
 	updateInstanceArgsForCall []struct {
 		arg1 string
-		arg2 *types.ServiceInstanceUpdate
+		arg2 *types.ServiceInstance
 		arg3 string
 		arg4 string
 		arg5 *smclient.Parameters
@@ -1056,12 +1056,12 @@ func (fake *FakeClient) UnbindReturnsOnCall(i int, result1 string, result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeClient) UpdateInstance(arg1 string, arg2 *types.ServiceInstanceUpdate, arg3 string, arg4 string, arg5 *smclient.Parameters) (*types.ServiceInstance, string, error) {
+func (fake *FakeClient) UpdateInstance(arg1 string, arg2 *types.ServiceInstance, arg3 string, arg4 string, arg5 *smclient.Parameters) (*types.ServiceInstance, string, error) {
 	fake.updateInstanceMutex.Lock()
 	ret, specificReturn := fake.updateInstanceReturnsOnCall[len(fake.updateInstanceArgsForCall)]
 	fake.updateInstanceArgsForCall = append(fake.updateInstanceArgsForCall, struct {
 		arg1 string
-		arg2 *types.ServiceInstanceUpdate
+		arg2 *types.ServiceInstance
 		arg3 string
 		arg4 string
 		arg5 *smclient.Parameters
@@ -1084,13 +1084,13 @@ func (fake *FakeClient) UpdateInstanceCallCount() int {
 	return len(fake.updateInstanceArgsForCall)
 }
 
-func (fake *FakeClient) UpdateInstanceCalls(stub func(string, *types.ServiceInstanceUpdate, string, string, *smclient.Parameters) (*types.ServiceInstance, string, error)) {
+func (fake *FakeClient) UpdateInstanceCalls(stub func(string, *types.ServiceInstance, string, string, *smclient.Parameters) (*types.ServiceInstance, string, error)) {
 	fake.updateInstanceMutex.Lock()
 	defer fake.updateInstanceMutex.Unlock()
 	fake.UpdateInstanceStub = stub
 }
 
-func (fake *FakeClient) UpdateInstanceArgsForCall(i int) (string, *types.ServiceInstanceUpdate, string, string, *smclient.Parameters) {
+func (fake *FakeClient) UpdateInstanceArgsForCall(i int) (string, *types.ServiceInstance, string, string, *smclient.Parameters) {
 	fake.updateInstanceMutex.RLock()
 	defer fake.updateInstanceMutex.RUnlock()
 	argsForCall := fake.updateInstanceArgsForCall[i]
