@@ -205,8 +205,7 @@ var _ = Describe("ServiceInstance controller", func() {
 						Eventually(func() bool {
 							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: serviceInstance.Name, Namespace: serviceInstance.Namespace}, serviceInstance)
 							Expect(err).ToNot(HaveOccurred())
-							isReady := len(serviceInstance.Status.Conditions) == 1
-							return isReady
+							return isReady(serviceInstance)
 						}, timeout, interval).Should(BeTrue())
 
 						Expect(len(serviceInstance.Status.Conditions)).To(Equal(1))
@@ -292,6 +291,19 @@ var _ = Describe("ServiceInstance controller", func() {
 					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 					Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
 				})
+			})
+		})
+
+		When("external name is not provided", func() {
+			It("succeeds and uses the k8s name as external name", func() {
+				withoutExternal := v1alpha1.ServiceInstanceSpec{
+					ServicePlanName:     "a-plan-name",
+					ServiceOfferingName: "an-offering-name",
+				}
+				serviceInstance = createInstance(ctx, withoutExternal)
+				Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
+				Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceName))
+				Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
 			})
 		})
 	})

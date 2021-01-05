@@ -80,7 +80,7 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	log.Info(fmt.Sprintf("Spec is changed, current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
+	log.Info(fmt.Sprintf("Current generation is %v and observed is %v", serviceInstance.Generation, serviceInstance.Status.ObservedGeneration))
 	serviceInstance.SetObservedGeneration(serviceInstance.Generation)
 
 	if serviceInstance.Status.InstanceID == "" {
