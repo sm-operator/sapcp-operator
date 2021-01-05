@@ -372,6 +372,13 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 			})
 
+			When("external name is not provided", func() {
+				It("succeeds and uses the k8s name as external name", func() {
+					createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "")
+					Expect(createdBinding.Spec.ExternalName).To(Equal(createdBinding.Name))
+				})
+			})
+
 			When("referenced service instance is failed", func() {
 				JustBeforeEach(func() {
 					setFailureConditions(smTypes.CREATE, "Failed to create instance (test)", createdInstance)
@@ -493,6 +500,48 @@ var _ = Describe("ServiceBinding controller", func() {
 			} {
 				executeTestCase(testCase)
 			}
+		})
+	})
+
+	Context("Update", func() {
+		JustBeforeEach(func() {
+			createdBinding = createBinding(context.Background(), bindingName, bindingTestNamespace, instanceName, "binding-external-name")
+			Expect(isReady(createdBinding)).To(BeTrue())
+		})
+
+		When("external name is changed", func() {
+			It("should fail", func() {
+				createdBinding.Spec.ExternalName = "new-external-name"
+				err := k8sClient.Update(context.Background(), createdBinding)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
+			})
+		})
+
+		When("service instance name is changed", func() {
+			It("should fail", func() {
+				createdBinding.Spec.ServiceInstanceName = "new-instance-name"
+				err := k8sClient.Update(context.Background(), createdBinding)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
+			})
+		})
+
+		When("parameters are changed", func() {
+			It("should fail", func() {
+				createdBinding.Spec.Parameters = &runtime.RawExtension{
+					Raw: []byte(`{"new-key": "new-value"}`),
+				}
+				err := k8sClient.Update(context.Background(), createdBinding)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("service binding spec cannot be modified after creation"))
+			})
+		})
+
+		XWhen("labels are changed", func() {
+			It("should fail", func() {
+				// TODO labels
+			})
 		})
 	})
 
