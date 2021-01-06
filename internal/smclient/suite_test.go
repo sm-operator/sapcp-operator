@@ -1,11 +1,10 @@
-package test
+package smclient
 
 import (
 	"context"
 	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/sm-operator/sapcp-operator/internal/smclient"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,12 +35,12 @@ func TestSMClient(t *testing.T) {
 }
 
 var (
-	client         smclient.Client
+	client         Client
 	handlerDetails []HandlerDetails
 	validToken     = "valid-token"
 	smServer       *httptest.Server
 	fakeAuthClient *FakeAuthClient
-	params         *smclient.Parameters
+	params         *Parameters
 )
 
 var createSMHandler = func() http.Handler {
@@ -69,13 +68,13 @@ var createSMHandler = func() http.Handler {
 }
 
 var verifyErrorMsg = func(errorMsg, path string, body []byte, statusCode int) {
-	Expect(errorMsg).To(ContainSubstring(smclient.BuildURL(smServer.URL+path, params)))
+	Expect(errorMsg).To(ContainSubstring(BuildURL(smServer.URL+path, params)))
 	Expect(errorMsg).To(ContainSubstring(string(body)))
 	Expect(errorMsg).To(ContainSubstring(fmt.Sprintf("StatusCode: %d", statusCode)))
 }
 
 var _ = BeforeEach(func() {
-	params = &smclient.Parameters{
+	params = &Parameters{
 		GeneralParams: []string{"key=value"},
 	}
 })
@@ -84,6 +83,6 @@ var _ = JustBeforeEach(func() {
 	smServer = httptest.NewServer(createSMHandler())
 	fakeAuthClient = &FakeAuthClient{AccessToken: validToken}
 	var err error
-	client, err = smclient.NewClient(context.TODO(), &smclient.ClientConfig{URL: smServer.URL}, fakeAuthClient)
+	client, err = NewClient(context.TODO(), &ClientConfig{URL: smServer.URL}, fakeAuthClient)
 	Expect(err).ToNot(HaveOccurred())
 })

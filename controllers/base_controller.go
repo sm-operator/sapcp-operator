@@ -149,6 +149,7 @@ func (r *BaseReconciler) updateStatus(ctx context.Context, object servicesv1alph
 		clonedObj := object.DeepClone()
 		if err := r.Status().Update(ctx, clonedObj); err != nil {
 			log.Info(fmt.Sprintf("failed to update status - %s, of %s giving up!!", err.Error(), object.GetControllerName()))
+			return err
 		}
 	}
 	log.Info(fmt.Sprintf("updated %s status in k8s", object.GetControllerName()))
