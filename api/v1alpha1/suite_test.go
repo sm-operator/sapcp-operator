@@ -9,7 +9,7 @@ import (
 
 func TestServer(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Webhook Suite")
+	RunSpecs(t, "SAPCP Resource Suite")
 }
 
 func getBinding() *ServiceBinding {
