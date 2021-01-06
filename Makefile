@@ -96,3 +96,4 @@ helm-charts:
 	cd config/manager && kustomize edit set image controller=image_placeholder:tag_placeholder
 	kustomize build config/default > ./sapcp-operator-charts/templates/sap-operator.yml
 	sed -i 's/image_placeholder:tag_placeholder/{{.Values.manager.image.repository}}:{{.Values.manager.image.tag}}/g' ./sapcp-operator-charts/templates/sap-operator.yml
+	sed -i 's/clusterid_placeholder/{{.Values.cluster.id | default uuidv4}}/g' ./sapcp-operator-charts/templates/sap-operator.yml
