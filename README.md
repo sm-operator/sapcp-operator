@@ -14,7 +14,15 @@
     ```
     kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml
     ```
-2. Create service manager secret:
+
+2. Deploy the sapcp-operator in the cluster:
+    ```
+    helm install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz
+    ```
+
+    The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)
+
+3. Create service manager secret:
     ```
     kubectl create secret generic sapcp-operator-secret \
       --from-literal=clientid="< clientid >" \
@@ -32,12 +40,6 @@
      --from-literal=subdomain="MyDemoSubaccount0909" \
      --namespace=sapcp-operator-system
     ```
-3. Deploy the sapcp-operator in the cluster:
-    ```
-    helm install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz
-    ```
-
-    The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)
 
 ## Local setup
 ### Prerequisites
