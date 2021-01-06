@@ -5,4 +5,4 @@ metadata:
   namespace: sapcp-operator-system
 data:
   MANAGEMENT_NAMESPACE: sapcp-operator-system
-  CLUSTER_ID: "{{uuidv4}}"
+  CLUSTER_ID: clusterid_placeholder

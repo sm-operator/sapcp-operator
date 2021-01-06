@@ -6,4 +6,5 @@ manager:
   image:
     repository: ghcr.io/sm-operator/sapcp-operator/controller
     tag: master
-
+cluster:
+  id:

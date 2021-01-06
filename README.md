@@ -25,19 +25,19 @@
 3. Create service manager secret:
     ```
     kubectl create secret generic sapcp-operator-secret \
-      --from-literal=clientid="< clientid >" \
-      --from-literal=clientsecret="< secret >" \
-      --from-literal=url="< sm_url >" \
-      --from-literal=subdomain="< subdomain >" \
+      --from-literal=clientid='< clientid >' \
+      --from-literal=clientsecret='< secret >' \
+      --from-literal=url='< sm_url >' \
+      --from-literal=subdomain='< subdomain >' \
       --namespace=sapcp-operator-system
      ```
      e.g.
     ```
     kubectl create secret generic sapcp-operator-secret \
-     --from-literal=clientid="myclient" \
-     --from-literal=clientsecret="mysecret" \
-     --from-literal=url="https://service-manager.cfapps.sap.hana.ondemand.com" \
-     --from-literal=subdomain="MyDemoSubaccount0909" \
+     --from-literal=clientid='myclient' \
+     --from-literal=clientsecret='mysecret' \
+     --from-literal=url='https://service-manager.cfapps.sap.hana.ondemand.com' \
+     --from-literal=subdomain='MyDemoSubaccount0909' \
      --namespace=sapcp-operator-system
     ```
 
@@ -56,6 +56,9 @@ make deploy IMG=controller:latest
 `make test`
 
 ### SAPCP kubectl extension (experimental) 
+## Prerequisites
+- [jq](https://stedolan.github.io/jq/)
+
 Download https://github.com/sm-operator/sapcp-operator/releases/download/${release}/kubectl-sapcp
 move its executable file to anywhere on your ``PATH``
 
@@ -119,10 +122,10 @@ move its executable file to anywhere on your ``PATH``
     kubectl apply -f filepath/mybinding.yaml
     ```
 
-3.  Check that your service status is **Created**.
+3.  Check that your binding status is **Created**.
 
     ```bash
-    kubectl get service
+    kubectl get servicebindings
     NAME        INSTANCE    STATUS    AGE
     mybinding   myservice   Created   9s
     
