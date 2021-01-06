@@ -65,7 +65,7 @@ func (r *ServiceBinding) ValidateCreate() error {
 func (r *ServiceBinding) ValidateUpdate(old runtime.Object) error {
 	servicebindinglog.Info("validate update", "name", r.Name)
 
-	if r.specChanged(old) && (r.Status.BindingID != "" || r.Status.OperationURL != "") {
+	if r.specChanged(old) && r.Status.BindingID != "" {
 		return fmt.Errorf("service binding spec cannot be modified after creation")
 	}
 
