@@ -21,6 +21,16 @@ var _ = Describe("Service Binding Webhook Test", func() {
 				Expect(binding.Spec.ExternalName).To(Equal(binding.Name))
 			})
 		})
+
+		When("No secret name provided", func() {
+			BeforeEach(func() {
+				binding.Spec.SecretName = ""
+			})
+			It("should add default", func() {
+				binding.Default()
+				Expect(binding.Spec.SecretName).To(Equal(binding.Name))
+			})
+		})
 	})
 
 	Context("Validator", func() {

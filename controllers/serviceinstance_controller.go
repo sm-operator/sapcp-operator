@@ -85,6 +85,10 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if serviceInstance.Status.InstanceID == "" {
 		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
+			setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
+			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
 
@@ -93,6 +97,10 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		instance, err := r.getInstanceForRecovery(smClient, serviceInstance, log)
 		if err != nil {
 			log.Error(err, "failed to check instance recovery")
+			setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
+			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
 		}
 		if instance != nil {

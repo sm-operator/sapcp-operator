@@ -90,7 +90,6 @@ var _ = Describe("ServiceBinding controller", func() {
 		if err != nil {
 			Expect(err.Error()).To(ContainSubstring(failureMessage))
 		} else {
-			Expect(createdBinding.Status.SecretName).To(BeEmpty())
 			Expect(len(createdBinding.Status.Conditions)).To(Equal(2))
 			Expect(createdBinding.Status.Conditions[1].Status).To(Equal(metav1.ConditionTrue))
 			Expect(createdBinding.Status.Conditions[1].Message).To(ContainSubstring(failureMessage))
@@ -102,7 +101,6 @@ var _ = Describe("ServiceBinding controller", func() {
 		if err != nil {
 			Expect(err.Error()).To(ContainSubstring(failureMessage))
 		} else {
-			Expect(createdBinding.Status.SecretName).To(BeEmpty())
 			Expect(len(createdBinding.Status.Conditions)).To(Equal(1))
 			Expect(createdBinding.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
 			Expect(createdBinding.Status.Conditions[0].Message).To(ContainSubstring(failureMessage))
@@ -118,7 +116,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 		Expect(createdBinding.Status.InstanceID).ToNot(BeEmpty())
 		Expect(createdBinding.Status.BindingID).To(Equal(fakeBindingID))
-		Expect(createdBinding.Status.SecretName).To(Not(BeEmpty()))
+		Expect(createdBinding.Spec.SecretName).To(Not(BeEmpty()))
 		Expect(int(createdBinding.Status.ObservedGeneration)).To(Equal(1))
 
 		return createdBinding
@@ -194,7 +192,7 @@ var _ = Describe("ServiceBinding controller", func() {
 
 	AfterEach(func() {
 		if createdBinding != nil {
-			secretName := createdBinding.Status.SecretName
+			secretName := createdBinding.Spec.SecretName
 			fakeClient.UnbindReturns("", nil)
 			_ = k8sClient.Delete(context.Background(), createdBinding)
 			Eventually(func() bool {
@@ -264,7 +262,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					Expect(createdBinding.Spec.ExternalName).To(Equal("binding-external-name"))
 
 					By("Verify binding secret created")
-					bindingSecret := getSecret(ctx, createdBinding.Status.SecretName, createdBinding.Namespace)
+					bindingSecret := getSecret(ctx, createdBinding.Spec.SecretName, createdBinding.Namespace)
 					validateSecretData(bindingSecret, "secret_key", "secret_value")
 				})
 
@@ -379,6 +377,22 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 			})
 
+			When("secret name is provided", func() {
+				It("should create a secret with the provided name", func() {
+					binding := newBinding(bindingName, bindingTestNamespace)
+					binding.Spec.ServiceInstanceName = instanceName
+					binding.Spec.SecretName = "my-special-secret"
+
+					Expect(k8sClient.Create(context.Background(), binding)).Should(Succeed())
+
+					Eventually(func() bool {
+						secret := &v1.Secret{}
+						err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "my-special-secret", Namespace: bindingTestNamespace}, secret)
+						return err == nil
+					}, timeout, interval).Should(BeTrue())
+				})
+			})
+
 			When("referenced service instance is failed", func() {
 				JustBeforeEach(func() {
 					setFailureConditions(smTypes.CREATE, "Failed to create instance (test)", createdInstance)
@@ -477,7 +491,7 @@ var _ = Describe("ServiceBinding controller", func() {
 	Context("Delete", func() {
 
 		validateBindingDeletion := func(binding *v1alpha1.ServiceBinding) {
-			secretName := binding.Status.SecretName
+			secretName := binding.Spec.SecretName
 			Expect(secretName).ToNot(BeEmpty())
 			Expect(k8sClient.Delete(context.Background(), binding)).To(Succeed())
 			Eventually(func() bool {
@@ -491,7 +505,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		}
 
 		validateBindingNotDeleted := func(binding *v1alpha1.ServiceBinding, errorMessage string) {
-			secretName := createdBinding.Status.SecretName
+			secretName := createdBinding.Spec.SecretName
 			Expect(secretName).ToNot(BeEmpty())
 			Expect(k8sClient.Delete(context.Background(), createdBinding)).To(Succeed())
 
