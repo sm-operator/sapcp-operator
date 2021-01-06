@@ -602,6 +602,49 @@ var _ = Describe("ServiceInstance controller", func() {
 				})
 			})
 		})
+
+		When("another operation is in progress", func() {
+			verifyResourceIsDeleted := func(resource *v1alpha1.ServiceInstance) {
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, defaultLookupKey, serviceInstance)
+					return errors.IsNotFound(err)
+				}, timeout, interval).Should(BeTrue())
+			}
+
+			BeforeEach(func() {
+				fakeClient.StatusReturns(&smclientTypes.Operation{
+					ID:    "1234",
+					Type:  string(smTypes.UPDATE),
+					State: string(smTypes.IN_PROGRESS),
+				}, nil)
+				serviceInstance.Status.OperationURL = "/1234"
+				serviceInstance.Status.OperationType = smTypes.CREATE
+				setInProgressCondition(smTypes.CREATE, "", serviceInstance)
+				Expect(k8sClient.Update(ctx, serviceInstance)).Should(Succeed())
+			})
+			When("operation end with success", func() {
+				It("resource should be deleted successfully after previous operation ended with success", func() {
+					deleteInstance(ctx, serviceInstance, false)
+					fakeClient.StatusReturns(&smclientTypes.Operation{
+						ID:    "1234",
+						Type:  string(smTypes.UPDATE),
+						State: string(smTypes.SUCCEEDED),
+					}, nil)
+					verifyResourceIsDeleted(serviceInstance)
+				})
+			})
+			When("operation end with failure", func() {
+				It("resource should be deleted successfully after previous operation ended with failure", func() {
+					deleteInstance(ctx, serviceInstance, false)
+					fakeClient.StatusReturns(&smclientTypes.Operation{
+						ID:    "1234",
+						Type:  string(smTypes.UPDATE),
+						State: string(smTypes.FAILED),
+					}, nil)
+					verifyResourceIsDeleted(serviceInstance)
+				})
+			})
+		})
 	})
 
 	Context("Recovery", func() {
