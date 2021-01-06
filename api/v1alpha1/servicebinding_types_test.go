@@ -20,5 +20,10 @@ var _ = Describe("Service Binding Type Test", func() {
 	It("should clone correctly", func() {
 		clonedBinding := binding.DeepClone()
 		Expect(binding).To(Equal(clonedBinding))
+		clonedStatus := binding.Status.DeepCopy()
+		Expect(&binding.Status).To(Equal(clonedStatus))
+		clonedSpec := binding.Spec.DeepCopy()
+		Expect(&binding.Spec).To(Equal(clonedSpec))
 	})
+
 })

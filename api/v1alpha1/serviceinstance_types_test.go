@@ -20,5 +20,9 @@ var _ = Describe("Service Instance Type Test", func() {
 	It("should clone correctly", func() {
 		clonedInstance := instance.DeepClone()
 		Expect(instance).To(Equal(clonedInstance))
+		clonedStatus := instance.Status.DeepCopy()
+		Expect(&instance.Status).To(Equal(clonedStatus))
+		clonedSpec := instance.Spec.DeepCopy()
+		Expect(&instance.Spec).To(Equal(clonedSpec))
 	})
 })
