@@ -875,6 +875,26 @@ var _ = Describe("Client test", func() {
 		})
 	})
 
+	Describe("Info", func() {
+		BeforeEach(func() {
+			responseBody := `
+				{
+					"token_issuer_url": "http://token.com",
+					"token_basic_auth": true
+				}`
+			handlerDetails = []HandlerDetails{
+				{Method: http.MethodGet, Path: web.InfoURL, ResponseBody: []byte(responseBody), ResponseStatusCode: http.StatusOK},
+			}
+		})
+
+		It("should retrieve correct info", func() {
+			info, err := client.GetInfo(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(info.TokenIssuerURL).To(Equal("http://token.com"))
+			Expect(info.TokenBasicAuth).To(BeTrue())
+		})
+	})
+
 	It("build operation url", func() {
 		opUrl := BuildOperationURL("5678", "1234", web.ServiceInstancesURL)
 		Expect(opUrl).To(Equal("/v1/service_instances/1234/operations/5678"))
