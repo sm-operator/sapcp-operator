@@ -563,6 +563,11 @@ var _ = Describe("Client test", func() {
 	Describe("Bindings", func() {
 		var binding *types.ServiceBinding
 
+		It("validate binding id extraction from operation url", func() {
+			bid := ExtractBindingID("/v1/service_bindings/1234/operations/5678")
+			Expect(bid).To(Equal("1234"))
+		})
+
 		Describe("List service bindings", func() {
 			Context("when there are service bindings registered", func() {
 				BeforeEach(func() {
@@ -868,6 +873,11 @@ var _ = Describe("Client test", func() {
 				})
 			})
 		})
+	})
+
+	It("build operation url", func() {
+		opUrl := BuildOperationURL("5678", "1234", web.ServiceInstancesURL)
+		Expect(opUrl).To(Equal("/v1/service_instances/1234/operations/5678"))
 	})
 
 })
