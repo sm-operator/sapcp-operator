@@ -57,7 +57,7 @@ make deploy IMG=controller:latest
 
 ### SAPCP kubectl extension (experimental) 
 ## Prerequisites
-- jq
+- [jq](https://stedolan.github.io/jq/)
 
 Download https://github.com/sm-operator/sapcp-operator/releases/download/${release}/kubectl-sapcp
 move its executable file to anywhere on your ``PATH``
