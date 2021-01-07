@@ -17,29 +17,17 @@
 
 2. Deploy the sapcp-operator in the cluster:
     ```
-    helm install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz
+    helm install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz \
+        --create-namespace \
+        --namespace=sapcp-operator \
+        --set manager.secret.clientid=$clientid \
+        --set manager.secret.clientsecret=$clientsecret \
+        --set manager.secret.url=$url \
+        --set manager.secret.subdomain=$subdomain
     ```
 
     The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)
 
-3. Create service manager secret:
-    ```
-    kubectl create secret generic sapcp-operator-secret \
-      --from-literal=clientid='< clientid >' \
-      --from-literal=clientsecret='< secret >' \
-      --from-literal=url='< sm_url >' \
-      --from-literal=subdomain='< subdomain >' \
-      --namespace=sapcp-operator-system
-     ```
-     e.g.
-    ```
-    kubectl create secret generic sapcp-operator-secret \
-     --from-literal=clientid='myclient' \
-     --from-literal=clientsecret='mysecret' \
-     --from-literal=url='https://service-manager.cfapps.sap.hana.ondemand.com' \
-     --from-literal=subdomain='MyDemoSubaccount0909' \
-     --namespace=sapcp-operator-system
-    ```
 
 ## Local setup
 ### Prerequisites

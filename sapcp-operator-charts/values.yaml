@@ -6,5 +6,10 @@ manager:
   image:
     repository: ghcr.io/sm-operator/sapcp-operator/controller
     tag: master
+  secret:
+    clientid:
+    clientsecret:
+    url:
+    subdomain:
 cluster:
   id:
