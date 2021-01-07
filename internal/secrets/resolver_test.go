@@ -46,7 +46,7 @@ var _ = Describe("Secrets Resolver", func() {
 				"clientid":     []byte(expectedClientID),
 				"clientsecret": []byte("client-secret"),
 				"url":          []byte("https://some.url"),
-				"subdomain":    []byte("sub-domain"),
+				"tokenurl":     []byte("https://token.url"),
 			},
 		}
 
