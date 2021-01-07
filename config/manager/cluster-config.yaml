@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sapcp-operator-config
-  namespace: sapcp-operator-system
-data:
-  MANAGEMENT_NAMESPACE: releasenamespace
-  CLUSTER_ID: clusterid_placeholder
