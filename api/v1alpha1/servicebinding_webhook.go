@@ -48,6 +48,10 @@ func (r *ServiceBinding) Default() {
 		servicebindinglog.Info("externalName not provided, defaulting to k8s name", "name", r.Name)
 		r.Spec.ExternalName = r.Name
 	}
+	if len(r.Spec.SecretName) == 0 {
+		servicebindinglog.Info("secretName not provided, defaulting to k8s name", "name", r.Name)
+		r.Spec.SecretName = r.Name
+	}
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.

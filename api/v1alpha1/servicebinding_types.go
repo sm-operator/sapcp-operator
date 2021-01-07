@@ -36,7 +36,12 @@ type ServiceBindingSpec struct {
 	ServiceInstanceName string `json:"serviceInstanceName"`
 
 	// The name of the binding in Service Manager
+	// +optional
 	ExternalName string `json:"externalName"`
+
+	// SecretName is the name of the secret where credentials will be stored
+	// +optional
+	SecretName string `json:"secretName"`
 
 	// Parameters for the binding
 	// +optional
@@ -72,9 +77,6 @@ type ServiceBindingStatus struct {
 
 	// Last generation that was acted on
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// SecretName is the name of the secret where credentials will be stored
-	// +optional
-	SecretName string `json:"secretName,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -59,13 +59,16 @@ spec:
             parameters:
               description: Parameters for the binding
               type: object
+            secretName:
+              description: SecretName is the name of the secret where credentials
+                will be stored
+              type: string
             serviceInstanceName:
               description: The k8s name of the service instance to bind, should be
                 in the namespace of the binding
               minLength: 1
               type: string
           required:
-          - externalName
           - serviceInstanceName
           type: object
         status:
@@ -158,10 +161,6 @@ spec:
               type: string
             operationURL:
               description: URL of ongoing operation for the service binding
-              type: string
-            secretName:
-              description: SecretName is the name of the secret where credentials
-                will be stored
               type: string
           required:
           - conditions
