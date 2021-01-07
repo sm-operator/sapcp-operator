@@ -4,5 +4,5 @@ metadata:
   name: sapcp-operator-config
   namespace: sapcp-operator-system
 data:
-  MANAGEMENT_NAMESPACE: sapcp-operator-system
+  MANAGEMENT_NAMESPACE: releasenamespace
   CLUSTER_ID: clusterid_placeholder
