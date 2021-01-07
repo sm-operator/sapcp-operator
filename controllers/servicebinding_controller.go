@@ -302,7 +302,6 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 		setFailureConditions(serviceBinding.Status.OperationType, statusErr.Error(), serviceBinding)
 		freshStatus := v1alpha1.ServiceBindingStatus{
 			Conditions: serviceBinding.GetConditions(),
-			SecretName: serviceBinding.Status.SecretName,
 		}
 		if isDelete(serviceBinding.ObjectMeta) {
 			freshStatus.BindingID = serviceBinding.Status.BindingID
@@ -435,7 +434,6 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.Serv
 	k8sBinding.Status.InstanceID = serviceInstanceID
 	k8sBinding.Status.OperationURL = ""
 	k8sBinding.Status.OperationType = ""
-	k8sBinding.Status.SecretName = k8sBinding.Name
 	switch smBinding.LastOperation.State {
 	case smTypes.PENDING:
 		fallthrough
@@ -451,7 +449,7 @@ func (r *ServiceBindingReconciler) resyncBindingStatus(k8sBinding *v1alpha1.Serv
 }
 
 func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBinding *v1alpha1.ServiceBinding, smBinding *smclientTypes.ServiceBinding, log logr.Logger) error {
-	logger := log.WithValues("bindingName", k8sBinding.Name, "secretName", k8sBinding.Name)
+	logger := log.WithValues("bindingName", k8sBinding.Name, "secretName", k8sBinding.Spec.SecretName)
 
 	var credentialsMap map[string][]byte
 	if len(smBinding.Credentials) == 0 {
@@ -468,7 +466,7 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: k8sBinding.Name,
+			Name: k8sBinding.Spec.SecretName,
 			// TODO annotations? labels?
 			Namespace: k8sBinding.Namespace,
 		},
@@ -490,7 +488,6 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 		}
 	}
 
-	k8sBinding.Status.SecretName = k8sBinding.Name
 	return nil
 }
 
@@ -499,7 +496,7 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 	bindingSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Namespace: binding.Namespace,
-		Name:      binding.Status.SecretName,
+		Name:      binding.Spec.SecretName,
 	}, bindingSecret); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch binding secret")
