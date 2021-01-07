@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,8 +41,6 @@ import (
 // Client should be implemented by SM clients
 //go:generate counterfeiter . Client
 type Client interface {
-	GetInfo(*Parameters) (*types.Info, error)
-
 	ListInstances(*Parameters) (*types.ServiceInstances, error)
 	GetInstanceByID(string, *Parameters) (*types.ServiceInstance, error)
 	UpdateInstance(id string, updatedInstance *types.ServiceInstance, serviceName string, planName string, q *Parameters) (*types.ServiceInstance, string, error)
@@ -81,83 +78,18 @@ type serviceManagerClient struct {
 
 // NewClientWithAuth returns new SM Client configured with the provided configuration
 func NewClient(ctx context.Context, config *ClientConfig, httpClient auth.HTTPClient) (Client, error) {
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	} else {
+	if httpClient != nil {
 		return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}, nil
-	}
-	client := &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}
-	var params *Parameters
-	if len(config.Subdomain) > 0 {
-		params = &Parameters{
-			GeneralParams: []string{"subdomain=" + config.Subdomain},
-		}
-	}
-
-	info, err := client.GetInfo(params)
-	if err != nil {
-		return nil, err
-	}
-
-	tokenURL, err := fetchTokenURL(info, httpClient)
-	if err != nil {
-		return nil, err
 	}
 	ccConfig := &clientcredentials.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		TokenURL:     tokenURL,
+		TokenURL:     config.TokenURL,
 		AuthStyle:    oauth2.AuthStyleInParams,
 	}
 
 	authClient := auth.NewAuthClient(ccConfig, config.SSLDisabled)
 	return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: authClient}, nil
-}
-
-func fetchTokenURL(info *types.Info, client auth.HTTPClient) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, httputil.NormalizeURL(info.TokenIssuerURL)+"/.well-known/openid-configuration", nil)
-	if err != nil {
-		return "", err
-	}
-
-	response, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-
-	if response.StatusCode != http.StatusOK {
-		return "", errors.New("unexpected status code")
-	}
-
-	var configuration map[string]string
-	if err = httputil.UnmarshalResponse(response, &configuration); err != nil {
-		return "", err
-	}
-
-	tokenURL, ok := configuration["token_endpoint"]
-	if !ok {
-		return "", errors.New("could not fetch token endpoint")
-	}
-	return tokenURL, nil
-}
-
-func (client *serviceManagerClient) GetInfo(q *Parameters) (*types.Info, error) {
-	response, err := client.Call(http.MethodGet, web.InfoURL, nil, q)
-	if err != nil {
-		return nil, err
-	}
-
-	if response.StatusCode != http.StatusOK {
-		return nil, util.HandleResponseError(response)
-	}
-
-	info := types.DefaultInfo
-	err = httputil.UnmarshalResponse(response, &info)
-	if err != nil {
-		return nil, err
-	}
-
-	return &info, nil
 }
 
 // Provision provisions a new service instance in service manager

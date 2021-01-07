@@ -91,7 +91,7 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 		ClientID:     string(secretData["clientid"]),
 		ClientSecret: string(secretData["clientsecret"]),
 		URL:          string(secretData["url"]),
-		Subdomain:    string(secretData["subdomain"]),
+		TokenURL:     string(secretData["tokenurl"]),
 		SSLDisabled:  false,
 	}, nil)
 

@@ -23,7 +23,7 @@
         --set manager.secret.clientid=$clientid \
         --set manager.secret.clientsecret=$clientsecret \
         --set manager.secret.url=$url \
-        --set manager.secret.subdomain=$subdomain
+        --set manager.secret.tokenurl=$tokenurl
     ```
 
     The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)

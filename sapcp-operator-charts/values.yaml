@@ -10,6 +10,6 @@ manager:
     clientid:
     clientsecret:
     url:
-    subdomain:
+    tokenurl:
 cluster:
   id:
