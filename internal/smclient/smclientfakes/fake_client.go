@@ -71,19 +71,6 @@ type FakeClient struct {
 		result1 *types.ServiceBinding
 		result2 error
 	}
-	GetInfoStub        func(*smclient.Parameters) (*types.Info, error)
-	getInfoMutex       sync.RWMutex
-	getInfoArgsForCall []struct {
-		arg1 *smclient.Parameters
-	}
-	getInfoReturns struct {
-		result1 *types.Info
-		result2 error
-	}
-	getInfoReturnsOnCall map[int]struct {
-		result1 *types.Info
-		result2 error
-	}
 	GetInstanceByIDStub        func(string, *smclient.Parameters) (*types.ServiceInstance, error)
 	getInstanceByIDMutex       sync.RWMutex
 	getInstanceByIDArgsForCall []struct {
@@ -226,15 +213,16 @@ func (fake *FakeClient) Bind(arg1 *types.ServiceBinding, arg2 *smclient.Paramete
 		arg1 *types.ServiceBinding
 		arg2 *smclient.Parameters
 	}{arg1, arg2})
+	stub := fake.BindStub
+	fakeReturns := fake.bindReturns
 	fake.recordInvocation("Bind", []interface{}{arg1, arg2})
 	fake.bindMutex.Unlock()
-	if fake.BindStub != nil {
-		return fake.BindStub(arg1, arg2)
+	if stub != nil {
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2, ret.result3
 	}
-	fakeReturns := fake.bindReturns
 	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
 }
 
@@ -295,15 +283,16 @@ func (fake *FakeClient) Call(arg1 string, arg2 string, arg3 io.Reader, arg4 *smc
 		arg3 io.Reader
 		arg4 *smclient.Parameters
 	}{arg1, arg2, arg3, arg4})
+	stub := fake.CallStub
+	fakeReturns := fake.callReturns
 	fake.recordInvocation("Call", []interface{}{arg1, arg2, arg3, arg4})
 	fake.callMutex.Unlock()
-	if fake.CallStub != nil {
-		return fake.CallStub(arg1, arg2, arg3, arg4)
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.callReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -359,15 +348,16 @@ func (fake *FakeClient) Deprovision(arg1 string, arg2 *smclient.Parameters) (str
 		arg1 string
 		arg2 *smclient.Parameters
 	}{arg1, arg2})
+	stub := fake.DeprovisionStub
+	fakeReturns := fake.deprovisionReturns
 	fake.recordInvocation("Deprovision", []interface{}{arg1, arg2})
 	fake.deprovisionMutex.Unlock()
-	if fake.DeprovisionStub != nil {
-		return fake.DeprovisionStub(arg1, arg2)
+	if stub != nil {
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.deprovisionReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -423,15 +413,16 @@ func (fake *FakeClient) GetBindingByID(arg1 string, arg2 *smclient.Parameters) (
 		arg1 string
 		arg2 *smclient.Parameters
 	}{arg1, arg2})
+	stub := fake.GetBindingByIDStub
+	fakeReturns := fake.getBindingByIDReturns
 	fake.recordInvocation("GetBindingByID", []interface{}{arg1, arg2})
 	fake.getBindingByIDMutex.Unlock()
-	if fake.GetBindingByIDStub != nil {
-		return fake.GetBindingByIDStub(arg1, arg2)
+	if stub != nil {
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.getBindingByIDReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -480,69 +471,6 @@ func (fake *FakeClient) GetBindingByIDReturnsOnCall(i int, result1 *types.Servic
 	}{result1, result2}
 }
 
-func (fake *FakeClient) GetInfo(arg1 *smclient.Parameters) (*types.Info, error) {
-	fake.getInfoMutex.Lock()
-	ret, specificReturn := fake.getInfoReturnsOnCall[len(fake.getInfoArgsForCall)]
-	fake.getInfoArgsForCall = append(fake.getInfoArgsForCall, struct {
-		arg1 *smclient.Parameters
-	}{arg1})
-	fake.recordInvocation("GetInfo", []interface{}{arg1})
-	fake.getInfoMutex.Unlock()
-	if fake.GetInfoStub != nil {
-		return fake.GetInfoStub(arg1)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	fakeReturns := fake.getInfoReturns
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *FakeClient) GetInfoCallCount() int {
-	fake.getInfoMutex.RLock()
-	defer fake.getInfoMutex.RUnlock()
-	return len(fake.getInfoArgsForCall)
-}
-
-func (fake *FakeClient) GetInfoCalls(stub func(*smclient.Parameters) (*types.Info, error)) {
-	fake.getInfoMutex.Lock()
-	defer fake.getInfoMutex.Unlock()
-	fake.GetInfoStub = stub
-}
-
-func (fake *FakeClient) GetInfoArgsForCall(i int) *smclient.Parameters {
-	fake.getInfoMutex.RLock()
-	defer fake.getInfoMutex.RUnlock()
-	argsForCall := fake.getInfoArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *FakeClient) GetInfoReturns(result1 *types.Info, result2 error) {
-	fake.getInfoMutex.Lock()
-	defer fake.getInfoMutex.Unlock()
-	fake.GetInfoStub = nil
-	fake.getInfoReturns = struct {
-		result1 *types.Info
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *FakeClient) GetInfoReturnsOnCall(i int, result1 *types.Info, result2 error) {
-	fake.getInfoMutex.Lock()
-	defer fake.getInfoMutex.Unlock()
-	fake.GetInfoStub = nil
-	if fake.getInfoReturnsOnCall == nil {
-		fake.getInfoReturnsOnCall = make(map[int]struct {
-			result1 *types.Info
-			result2 error
-		})
-	}
-	fake.getInfoReturnsOnCall[i] = struct {
-		result1 *types.Info
-		result2 error
-	}{result1, result2}
-}
-
 func (fake *FakeClient) GetInstanceByID(arg1 string, arg2 *smclient.Parameters) (*types.ServiceInstance, error) {
 	fake.getInstanceByIDMutex.Lock()
 	ret, specificReturn := fake.getInstanceByIDReturnsOnCall[len(fake.getInstanceByIDArgsForCall)]
@@ -550,15 +478,16 @@ func (fake *FakeClient) GetInstanceByID(arg1 string, arg2 *smclient.Parameters) 
 		arg1 string
 		arg2 *smclient.Parameters
 	}{arg1, arg2})
+	stub := fake.GetInstanceByIDStub
+	fakeReturns := fake.getInstanceByIDReturns
 	fake.recordInvocation("GetInstanceByID", []interface{}{arg1, arg2})
 	fake.getInstanceByIDMutex.Unlock()
-	if fake.GetInstanceByIDStub != nil {
-		return fake.GetInstanceByIDStub(arg1, arg2)
+	if stub != nil {
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.getInstanceByIDReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -613,15 +542,16 @@ func (fake *FakeClient) ListBindings(arg1 *smclient.Parameters) (*types.ServiceB
 	fake.listBindingsArgsForCall = append(fake.listBindingsArgsForCall, struct {
 		arg1 *smclient.Parameters
 	}{arg1})
+	stub := fake.ListBindingsStub
+	fakeReturns := fake.listBindingsReturns
 	fake.recordInvocation("ListBindings", []interface{}{arg1})
 	fake.listBindingsMutex.Unlock()
-	if fake.ListBindingsStub != nil {
-		return fake.ListBindingsStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.listBindingsReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -676,15 +606,16 @@ func (fake *FakeClient) ListInstances(arg1 *smclient.Parameters) (*types.Service
 	fake.listInstancesArgsForCall = append(fake.listInstancesArgsForCall, struct {
 		arg1 *smclient.Parameters
 	}{arg1})
+	stub := fake.ListInstancesStub
+	fakeReturns := fake.listInstancesReturns
 	fake.recordInvocation("ListInstances", []interface{}{arg1})
 	fake.listInstancesMutex.Unlock()
-	if fake.ListInstancesStub != nil {
-		return fake.ListInstancesStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.listInstancesReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -739,15 +670,16 @@ func (fake *FakeClient) ListOfferings(arg1 *smclient.Parameters) (*types.Service
 	fake.listOfferingsArgsForCall = append(fake.listOfferingsArgsForCall, struct {
 		arg1 *smclient.Parameters
 	}{arg1})
+	stub := fake.ListOfferingsStub
+	fakeReturns := fake.listOfferingsReturns
 	fake.recordInvocation("ListOfferings", []interface{}{arg1})
 	fake.listOfferingsMutex.Unlock()
-	if fake.ListOfferingsStub != nil {
-		return fake.ListOfferingsStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.listOfferingsReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -802,15 +734,16 @@ func (fake *FakeClient) ListPlans(arg1 *smclient.Parameters) (*types.ServicePlan
 	fake.listPlansArgsForCall = append(fake.listPlansArgsForCall, struct {
 		arg1 *smclient.Parameters
 	}{arg1})
+	stub := fake.ListPlansStub
+	fakeReturns := fake.listPlansReturns
 	fake.recordInvocation("ListPlans", []interface{}{arg1})
 	fake.listPlansMutex.Unlock()
-	if fake.ListPlansStub != nil {
-		return fake.ListPlansStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.listPlansReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -868,15 +801,16 @@ func (fake *FakeClient) Provision(arg1 *types.ServiceInstance, arg2 string, arg3
 		arg3 string
 		arg4 *smclient.Parameters
 	}{arg1, arg2, arg3, arg4})
+	stub := fake.ProvisionStub
+	fakeReturns := fake.provisionReturns
 	fake.recordInvocation("Provision", []interface{}{arg1, arg2, arg3, arg4})
 	fake.provisionMutex.Unlock()
-	if fake.ProvisionStub != nil {
-		return fake.ProvisionStub(arg1, arg2, arg3, arg4)
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2, ret.result3
 	}
-	fakeReturns := fake.provisionReturns
 	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
 }
 
@@ -935,15 +869,16 @@ func (fake *FakeClient) Status(arg1 string, arg2 *smclient.Parameters) (*types.O
 		arg1 string
 		arg2 *smclient.Parameters
 	}{arg1, arg2})
+	stub := fake.StatusStub
+	fakeReturns := fake.statusReturns
 	fake.recordInvocation("Status", []interface{}{arg1, arg2})
 	fake.statusMutex.Unlock()
-	if fake.StatusStub != nil {
-		return fake.StatusStub(arg1, arg2)
+	if stub != nil {
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.statusReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -999,15 +934,16 @@ func (fake *FakeClient) Unbind(arg1 string, arg2 *smclient.Parameters) (string, 
 		arg1 string
 		arg2 *smclient.Parameters
 	}{arg1, arg2})
+	stub := fake.UnbindStub
+	fakeReturns := fake.unbindReturns
 	fake.recordInvocation("Unbind", []interface{}{arg1, arg2})
 	fake.unbindMutex.Unlock()
-	if fake.UnbindStub != nil {
-		return fake.UnbindStub(arg1, arg2)
+	if stub != nil {
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.unbindReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -1066,15 +1002,16 @@ func (fake *FakeClient) UpdateInstance(arg1 string, arg2 *types.ServiceInstance,
 		arg4 string
 		arg5 *smclient.Parameters
 	}{arg1, arg2, arg3, arg4, arg5})
+	stub := fake.UpdateInstanceStub
+	fakeReturns := fake.updateInstanceReturns
 	fake.recordInvocation("UpdateInstance", []interface{}{arg1, arg2, arg3, arg4, arg5})
 	fake.updateInstanceMutex.Unlock()
-	if fake.UpdateInstanceStub != nil {
-		return fake.UpdateInstanceStub(arg1, arg2, arg3, arg4, arg5)
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4, arg5)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2, ret.result3
 	}
-	fakeReturns := fake.updateInstanceReturns
 	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
 }
 
@@ -1137,8 +1074,6 @@ func (fake *FakeClient) Invocations() map[string][][]interface{} {
 	defer fake.deprovisionMutex.RUnlock()
 	fake.getBindingByIDMutex.RLock()
 	defer fake.getBindingByIDMutex.RUnlock()
-	fake.getInfoMutex.RLock()
-	defer fake.getInfoMutex.RUnlock()
 	fake.getInstanceByIDMutex.RLock()
 	defer fake.getInstanceByIDMutex.RUnlock()
 	fake.listBindingsMutex.RLock()
