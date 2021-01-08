@@ -13,7 +13,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 SED ?= sed -i
-ifeq ($(shell go env GOARCH),amd64)
+ifeq ($(shell go env GOOS),darwin)
 SED = sed -i ''
 endif
 
