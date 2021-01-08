@@ -44,9 +44,15 @@ uninstall: manifests
 	kustomize build config/crd | kubectl delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
-	kustomize build config/default | kubectl apply -f -
+deploy: manifests helm-charts
+	helm upgrade --install sapcp-operator ./sapcp-operator-charts \
+        --create-namespace \
+        --namespace=sapcp-operator-system \
+		--set manager.image.repository=controller \
+		--set manager.image.tag=latest
+
+undeploy:
+	helm uninstall sapcp-operator -n sapcp-operator-system
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -99,6 +105,7 @@ lint-deps:
 
 helm-charts:
 	cd config/manager && kustomize edit set image controller=image_placeholder:tag_placeholder
+	cd config/default && kustomize edit set namespace releasenamespace
 	kustomize build config/default > ./sapcp-operator-charts/templates/sap-operator.yml
 	$(SED) 's/image_placeholder:tag_placeholder/{{.Values.manager.image.repository}}:{{.Values.manager.image.tag}}/g' ./sapcp-operator-charts/templates/sap-operator.yml
-	$(SED) 's/clusterid_placeholder/{{.Values.cluster.id | default uuidv4}}/g' ./sapcp-operator-charts/templates/sap-operator.yml
+	$(SED) 's/releasenamespace/{{.Release.Namespace}}/g' ./sapcp-operator-charts/templates/sap-operator.yml

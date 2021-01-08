@@ -17,39 +17,28 @@
 
 2. Deploy the sapcp-operator in the cluster:
     ```
-    helm install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz
+    helm upgrade --install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz \
+        --create-namespace \
+        --namespace=sapcp-operator \
+        --set manager.secret.clientid=$clientid \
+        --set manager.secret.clientsecret=$clientsecret \
+        --set manager.secret.url=$url \
+        --set manager.secret.tokenurl=$tokenurl
     ```
 
     The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)
 
-3. Create service manager secret:
-    ```
-    kubectl create secret generic sapcp-operator-secret \
-      --from-literal=clientid='< clientid >' \
-      --from-literal=clientsecret='< secret >' \
-      --from-literal=url='< sm_url >' \
-      --from-literal=subdomain='< subdomain >' \
-      --namespace=sapcp-operator-system
-     ```
-     e.g.
-    ```
-    kubectl create secret generic sapcp-operator-secret \
-     --from-literal=clientid='myclient' \
-     --from-literal=clientsecret='mysecret' \
-     --from-literal=url='https://service-manager.cfapps.sap.hana.ondemand.com' \
-     --from-literal=subdomain='MyDemoSubaccount0909' \
-     --namespace=sapcp-operator-system
-    ```
 
 ## Local setup
 ### Prerequisites
 - [kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 
 ### Deploy locally
+Edit [manager secret](sapcp-operator-charts/values.yaml) section with SM credentials. (DO NOT SUBMIT)
 ```
 make docker-build
 kind load docker-image controller:latest
-make deploy IMG=controller:latest
+make deploy
 ```
 
 ### Run tests

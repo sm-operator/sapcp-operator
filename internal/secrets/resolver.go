@@ -80,7 +80,7 @@ func validateSAPCPOperatorSecret(secret *v1.Secret) error {
 		return fmt.Errorf("invalid secret - secret data is missing")
 	}
 
-	for _, field := range []string{"clientid", "clientsecret", "url", "subdomain"} {
+	for _, field := range []string{"clientid", "clientsecret", "url", "tokenurl"} {
 		if len(secretData[field]) == 0 {
 			return fmt.Errorf("invalid secret - %s is missing", field)
 		}
