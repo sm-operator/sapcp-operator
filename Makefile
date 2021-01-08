@@ -44,9 +44,12 @@ uninstall: manifests
 	kustomize build config/crd | kubectl delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
-	kustomize build config/default | kubectl apply -f -
+deploy: manifests helm-charts
+	helm upgrade --install sapcp-operator ./sapcp-operator-charts \
+        --create-namespace \
+        --namespace=sapcp-operator-system \
+		--set manager.image.repository=controller \
+		--set manager.image.tag=latest
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen

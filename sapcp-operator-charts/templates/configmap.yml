@@ -4,5 +4,5 @@ data:
   MANAGEMENT_NAMESPACE: {{.Release.Namespace}}
 kind: ConfigMap
 metadata:
-  name: sapcp-operator-sapcp-operator-config
+  name: sapcp-operator-config
   namespace: {{.Release.Namespace}}
