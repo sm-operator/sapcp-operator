@@ -17,7 +17,7 @@
 
 2. Deploy the sapcp-operator in the cluster:
     ```
-    helm install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz \
+    helm upgrade --install sapcp-operator https://github.com/sm-operator/sapcp-operator/releases/download/${release}/sapcp-operator-${release}.tgz \
         --create-namespace \
         --namespace=sapcp-operator \
         --set manager.secret.clientid=$clientid \
