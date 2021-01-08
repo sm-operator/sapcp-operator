@@ -34,6 +34,7 @@
 - [kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 
 ### Deploy locally
+Edit [manager secret](sapcp-operator-charts/values.yaml) section with SM credentials. (DO NOT SUBMIT)
 ```
 make docker-build
 kind load docker-image controller:latest
