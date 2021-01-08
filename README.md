@@ -37,13 +37,7 @@
 ```
 make docker-build
 kind load docker-image controller:latest
-helm install sapcp-operator ./sapcp-operator-charts \
-    --create-namespace \
-    --namespace=sapcp-operator \
-    --set manager.secret.clientid=$clientid \
-    --set manager.secret.clientsecret=$clientsecret \
-    --set manager.secret.url=$url \
-    --set manager.secret.tokenurl=$tokenurl
+make deploy
 ```
 
 ### Run tests
