@@ -31,14 +31,6 @@ var _ = Describe("Service Binding Webhook Test", func() {
 				Expect(binding.Spec.SecretName).To(Equal(binding.Name))
 			})
 		})
-
-		When("New binding created", func() {
-			It("should add in_progress condition", func() {
-				binding.Default()
-				Expect(len(binding.Status.Conditions)).To(Equal(1))
-				Expect(binding.Status.Conditions[0].Reason).To(Equal("CreateInProgress"))
-			})
-		})
 	})
 
 	Context("Validator", func() {
