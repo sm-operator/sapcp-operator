@@ -145,8 +145,14 @@ func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alph
 func (r *BaseReconciler) updateStatus(ctx context.Context, object servicesv1alpha1.SAPCPResource, log logr.Logger) error {
 	log.Info(fmt.Sprintf("updating %s status", object.GetControllerName()))
 	if err := r.Status().Update(ctx, object); err != nil {
-		log.Info(fmt.Sprintf("failed to update status of %s trying again with cloned status. %s", object.GetControllerName(), err.Error()))
+		log.Info(fmt.Sprintf("failed to update status of %s trying one more time. %s", object.GetControllerName(), err.Error()))
+		status := object.GetStatus()
+		if err := r.Get(ctx, apimachinerytypes.NamespacedName{Name: object.GetName(), Namespace: object.GetNamespace()}, object); err != nil {
+			log.Error(err, fmt.Sprintf("failed to fetch latest %s, unable to update status", object.GetControllerName()))
+			return err
+		}
 		clonedObj := object.DeepClone()
+		clonedObj.SetStatus(status)
 		if err := r.Status().Update(ctx, clonedObj); err != nil {
 			log.Info(fmt.Sprintf("failed to update status of %s giving up!! %s", object.GetControllerName(), err.Error()))
 			return err

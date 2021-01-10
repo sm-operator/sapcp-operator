@@ -36,7 +36,7 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-const tokenUrlSuffix = "/oauth/token?grant_type=client_credentials"
+const tokenUrlSuffix = "/oauth/token"
 
 // Client should be implemented by SM clients
 //go:generate counterfeiter . Client
