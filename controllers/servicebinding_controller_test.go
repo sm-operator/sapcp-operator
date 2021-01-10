@@ -122,7 +122,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		return createdBinding
 	}
 
-	createInstance := func(ctx context.Context, name, namespace, externalName string, wait bool) *v1alpha1.ServiceInstance {
+	createInstance := func(ctx context.Context, name, namespace, externalName string) *v1alpha1.ServiceInstance {
 		instance := &v1alpha1.ServiceInstance{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "services.cloud.sap.com/v1alpha1",
@@ -148,11 +148,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			if err != nil {
 				return false
 			}
-			if wait {
-				return isReady(createdInstance)
-			} else {
-				return len(createdInstance.Status.Conditions) > 0
-			}
+			return isReady(createdInstance)
 		}, timeout, interval).Should(BeTrue())
 		Expect(createdInstance.Status.InstanceID).ToNot(BeEmpty())
 
@@ -160,7 +156,7 @@ var _ = Describe("ServiceBinding controller", func() {
 	}
 
 	JustBeforeEach(func() {
-		createdInstance = createInstance(context.Background(), instanceName, bindingTestNamespace, "", true)
+		createdInstance = createInstance(context.Background(), instanceName, bindingTestNamespace, "")
 	})
 
 	BeforeEach(func() {

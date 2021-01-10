@@ -61,7 +61,7 @@ var _ = Describe("ServiceInstance controller", func() {
 			if err != nil {
 				return false
 			}
-			return len(createdInstance.Status.Conditions) > 0
+			return createdInstance.GetObservedGeneration() > 0
 		}, timeout, interval).Should(BeTrue())
 
 		return createdInstance
