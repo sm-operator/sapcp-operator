@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -73,6 +74,9 @@ func (r *ServiceBinding) ValidateUpdate(old runtime.Object) error {
 		return fmt.Errorf("service binding spec cannot be modified after creation")
 	}
 
+	if len(r.Status.Conditions) == 0 && r.Generation == 1 {
+		r.Status.Conditions = append(r.Status.Conditions, metav1.Condition{Type: ConditionReady, Status: metav1.ConditionFalse, Reason: "CreateInProgress"})
+	}
 	return nil
 }
 
