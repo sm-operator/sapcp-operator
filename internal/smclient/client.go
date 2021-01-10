@@ -36,7 +36,7 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-//TODO test client package
+const tokenURLSuffix = "/oauth/token"
 
 // Client should be implemented by SM clients
 //go:generate counterfeiter . Client
@@ -84,7 +84,7 @@ func NewClient(ctx context.Context, config *ClientConfig, httpClient auth.HTTPCl
 	ccConfig := &clientcredentials.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		TokenURL:     config.TokenURL,
+		TokenURL:     config.TokenURL + tokenURLSuffix,
 		AuthStyle:    oauth2.AuthStyleInParams,
 	}
 
