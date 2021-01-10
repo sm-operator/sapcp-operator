@@ -47,12 +47,12 @@ uninstall: manifests
 deploy: manifests helm-charts
 	helm upgrade --install sapcp-operator ./sapcp-operator-charts \
         --create-namespace \
-        --namespace=sapcp-operator-system \
+        --namespace=sapcp-operator \
 		--set manager.image.repository=controller \
 		--set manager.image.tag=latest
 
 undeploy:
-	helm uninstall sapcp-operator -n sapcp-operator-system
+	helm uninstall sapcp-operator -n sapcp-operator
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
