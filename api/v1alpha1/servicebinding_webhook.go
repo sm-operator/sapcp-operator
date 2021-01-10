@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -51,6 +52,10 @@ func (r *ServiceBinding) Default() {
 	if len(r.Spec.SecretName) == 0 {
 		servicebindinglog.Info("secretName not provided, defaulting to k8s name", "name", r.Name)
 		r.Spec.SecretName = r.Name
+	}
+
+	if len(r.Status.Conditions) == 0 && r.Generation == 0 {
+		r.Status.Conditions = append(r.Status.Conditions, metav1.Condition{Type: ConditionReady, Status: metav1.ConditionFalse, Reason: "CreateInProgress"})
 	}
 }
 

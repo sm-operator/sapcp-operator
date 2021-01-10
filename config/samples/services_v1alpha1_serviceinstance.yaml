@@ -1,8 +1,7 @@
 apiVersion: services.cloud.sap.com/v1alpha1
 kind: ServiceInstance
 metadata:
-  name: sample-instance-
+  name: sample-instance-1
 spec:
-  externalName: sample-instance-1
   serviceOfferingName: service-manager
   servicePlanName: subaccount-admin
