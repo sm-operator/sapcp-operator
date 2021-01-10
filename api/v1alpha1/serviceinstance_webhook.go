@@ -46,7 +46,7 @@ func (r *ServiceInstance) Default() {
 		r.Spec.ExternalName = r.Name
 	}
 
-	if len(r.Status.Conditions) == 0 && r.Generation == 1 {
+	if len(r.Status.Conditions) == 0 && r.Generation == 0 {
 		r.Status.Conditions = append(r.Status.Conditions, metav1.Condition{Type: ConditionReady, Status: metav1.ConditionFalse, Reason: "CreateInProgress"})
 	}
 }
