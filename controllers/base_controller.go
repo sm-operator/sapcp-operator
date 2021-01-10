@@ -145,10 +145,10 @@ func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alph
 func (r *BaseReconciler) updateStatus(ctx context.Context, object servicesv1alpha1.SAPCPResource, log logr.Logger) error {
 	log.Info(fmt.Sprintf("updating %s status", object.GetControllerName()))
 	if err := r.Status().Update(ctx, object); err != nil {
-		log.Info(fmt.Sprintf("failed to update status - %s, of %s trying again with cloned status", err.Error(), object.GetControllerName()))
+		log.Info(fmt.Sprintf("failed to update status of %s trying again with cloned status. %s", object.GetControllerName(), err.Error()))
 		clonedObj := object.DeepClone()
 		if err := r.Status().Update(ctx, clonedObj); err != nil {
-			log.Info(fmt.Sprintf("failed to update status - %s, of %s giving up!!", err.Error(), object.GetControllerName()))
+			log.Info(fmt.Sprintf("failed to update status of %s giving up!! %s", object.GetControllerName(), err.Error()))
 			return err
 		}
 	}
