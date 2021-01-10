@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -44,9 +43,5 @@ func (r *ServiceInstance) Default() {
 
 	if len(r.Spec.ExternalName) == 0 {
 		r.Spec.ExternalName = r.Name
-	}
-
-	if len(r.Status.Conditions) == 0 && r.Generation == 0 {
-		r.Status.Conditions = append(r.Status.Conditions, metav1.Condition{Type: ConditionReady, Status: metav1.ConditionFalse, Reason: "CreateInProgress"})
 	}
 }
