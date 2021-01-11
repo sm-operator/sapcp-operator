@@ -16,6 +16,9 @@ With the SAPCP Operator, you can provision and bind SAPCP services to your Kuber
 * [Using the SAPCP Operator](#using-the-sapcp-operator)
     * [Creating a service instance](#step-1-creating-a-service-instance)
     * [Binding the service instance](#step-2-binding-the-service-instance)
+* [Reference documentation](#reference-documentation)
+    * [Service instance properties](#service-instance-properties)
+    * [Binding properties](#binding-properties)    
 
 ## Prerequisites
 - kubernetes cluster
@@ -145,4 +148,26 @@ move its executable file to anywhere on your ``PATH``
     NAME        TYPE     DATA   AGE
     mybinding   Opaque   5      102s
     ```
+[Back to top](#sapcp-operator)
+
+## Reference documentation
+
+### Service Instance Properties
+| Parameter             | Type       | Comments                                                                                                   |
+|:-----------------|:---------|:-----------------------------------------------------------------------------------------------------------|
+| serviceOfferingName   `*`   | `string`   | SAPCP service offering name |
+| servicePlanName  `*` | `string`   |  The plan to use for the service instance, such as `free` or `standard`. |
+| servicePlanID   |  `string`   |  The plan ID in case service offering and plan name are ambiguous |
+| externalName       | `string`   |  The name for the service instance in SAPCP |
+| parameters       |  `[]object`  |  Provisioning parameters for the instance |
+
+### Binding Properties
+| Parameter             | Type       | Comments                                                                                                   |
+|:-----------------|:---------|:-----------------------------------------------------------------------------------------------------------|
+| serviceInstanceName   `*`   | `string`   | The k8s name of the service instance to bind, should be in the namespace of the binding |
+| servicePlanID   |  `string`   |  The plan ID in case service offering and plan name are ambiguous |
+| externalName       | `string`   |  The name for the service binding in SAPCP |
+| secretName       | `string`   |  the name of the secret where credentials will be stored |
+| parameters       |  `[]object`  |  Provisioning parameters for the instance |
+
 [Back to top](#sapcp-operator)
