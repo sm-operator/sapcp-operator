@@ -182,7 +182,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 
 	if bindErr != nil {
 		log.Error(err, "failed to create service binding", "serviceInstanceID", serviceInstance.Status.InstanceID)
-		if isTransientError(bindErr) {
+		if isTransientError(bindErr, log) {
 			return r.markAsTransientError(ctx, smTypes.CREATE, bindErr.Error(), serviceInstance, log)
 		}
 		return r.markAsNonTransientError(ctx, smTypes.CREATE, bindErr.Error(), serviceBinding, log)
@@ -261,7 +261,7 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 		operationURL, unbindErr := smClient.Unbind(serviceBinding.Status.BindingID, nil)
 		if unbindErr != nil {
 			log.Error(unbindErr, "failed to delete binding")
-			if isTransientError(unbindErr) {
+			if isTransientError(unbindErr, log) {
 				return r.markAsTransientError(ctx, smTypes.DELETE, unbindErr.Error(), serviceBinding, log)
 			}
 			// if fail to delete the binding in SM, return with error

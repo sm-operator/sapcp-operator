@@ -18,6 +18,7 @@ coverage.html
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
 sapcp-operator-charts/templates/sap-operator.yml
+hack/override_values.yaml
 
 # editor and IDE paraphernalia
 .idea

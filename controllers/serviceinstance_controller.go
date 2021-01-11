@@ -212,7 +212,7 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	if provisionErr != nil {
 		log.Error(provisionErr, "failed to create service instance", "serviceOfferingName", serviceInstance.Spec.ServiceOfferingName,
 			"servicePlanName", serviceInstance.Spec.ServicePlanName)
-		if isTransientError(provisionErr) {
+		if isTransientError(provisionErr, log) {
 			return r.markAsTransientError(ctx, smTypes.CREATE, provisionErr.Error(), serviceInstance, log)
 		}
 		return r.markAsNonTransientError(ctx, smTypes.CREATE, provisionErr.Error(), serviceInstance, log)
@@ -257,7 +257,7 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 	}, serviceInstance.Spec.ServiceOfferingName, serviceInstance.Spec.ServicePlanName, nil)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to update service instance with ID %s", serviceInstance.Status.InstanceID))
-		if isTransientError(err) {
+		if isTransientError(err, log) {
 			return r.markAsTransientError(ctx, smTypes.UPDATE, err.Error(), serviceInstance, log)
 		}
 		return r.markAsNonTransientError(ctx, smTypes.UPDATE, err.Error(), serviceInstance, log)
@@ -298,7 +298,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		log.Info(fmt.Sprintf("Deleting instance with id %v from SM", serviceInstance.Status.InstanceID))
 		operationURL, deprovisionErr := smClient.Deprovision(serviceInstance.Status.InstanceID, nil)
 		if deprovisionErr != nil {
-			if isTransientError(deprovisionErr) {
+			if isTransientError(deprovisionErr, log) {
 				return r.markAsTransientError(ctx, smTypes.DELETE, deprovisionErr.Error(), serviceInstance, log)
 			}
 
