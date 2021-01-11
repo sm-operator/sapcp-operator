@@ -75,10 +75,11 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return r.delete(ctx, serviceBinding, log)
 	}
 	// The object is not being deleted, so if it does not have our finalizer,
-	// then lets add the finalizer and update the object. This is equivalent
-	// registering our finalizer.
-	if err := r.addFinalizer(ctx, serviceBinding, bindingFinalizerName, log); err != nil {
-		return ctrl.Result{}, err
+	// then lets init it
+	if !controllerutil.ContainsFinalizer(serviceBinding, bindingFinalizerName) {
+		if err := r.init(ctx, bindingFinalizerName, log, serviceBinding); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if serviceBinding.GetObservedGeneration() > 0 && !isInProgress(serviceBinding) {
@@ -100,7 +101,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 
 		setBlockedCondition(instanceErr.Error(), serviceBinding)
-		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -112,7 +113,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 		setInProgressCondition(smTypes.CREATE, fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
 			serviceBinding)
-		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -146,7 +147,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				}
 			}
 			r.resyncBindingStatus(serviceBinding, binding, serviceInstance.Status.InstanceID)
-			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -189,7 +190,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 
 	if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
 		setFailureConditions(smTypes.CREATE, "", serviceBinding)
-		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
@@ -206,7 +207,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 		serviceBinding.Status.OperationURL = operationURL
 		serviceBinding.Status.OperationType = smTypes.CREATE
 		setInProgressCondition(smTypes.CREATE, "", serviceBinding)
-		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
@@ -218,7 +219,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
 		log.Error(err, "failed to create secret")
 		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
-		if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "unable to update ServiceBinding status")
 			return ctrl.Result{}, err
 		}
@@ -228,7 +229,7 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	setSuccessConditions(smTypes.CREATE, serviceBinding)
 	serviceBinding.Status.BindingID = smBinding.ID
 	log.Info("Updating binding", "bindingID", smBinding.ID)
-	if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+	if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -266,7 +267,7 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 			// if fail to delete the binding in SM, return with error
 			// so that it can be retried
 			setFailureConditions(smTypes.DELETE, unbindErr.Error(), serviceBinding)
-			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, unbindErr
@@ -277,7 +278,7 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 			serviceBinding.Status.OperationURL = operationURL
 			serviceBinding.Status.OperationType = smTypes.DELETE
 			setInProgressCondition(smTypes.DELETE, "", serviceBinding)
-			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
@@ -307,7 +308,7 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 			freshStatus.BindingID = serviceBinding.Status.BindingID
 		}
 		serviceBinding.Status = freshStatus
-		if err = r.updateStatus(ctx, serviceBinding, log); err != nil {
+		if err = r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "failed to update status during polling")
 		}
 		return ctrl.Result{}, statusErr
@@ -323,7 +324,7 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 		if serviceBinding.Status.OperationType == smTypes.DELETE {
 			serviceBinding.Status.OperationURL = ""
 			serviceBinding.Status.OperationType = ""
-			if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 				log.Error(err, "unable to update ServiceBinding status")
 				return ctrl.Result{}, err
 			}
@@ -355,7 +356,7 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 	serviceBinding.Status.OperationURL = ""
 	serviceBinding.Status.OperationType = ""
 
-	err = r.updateStatus(ctx, serviceBinding, log)
+	err = r.updateStatusWithRetries(ctx, serviceBinding, log)
 	return ctrl.Result{}, err
 }
 
@@ -544,7 +545,7 @@ func (r *ServiceBindingReconciler) getBindingForRecovery(smClient smclient.Clien
 func (r *ServiceBindingReconciler) removeBindingFromKubernetes(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
 	serviceBinding.Status.BindingID = ""
 	setSuccessConditions(smTypes.DELETE, serviceBinding)
-	if err := r.updateStatus(ctx, serviceBinding, log); err != nil {
+	if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 		return ctrl.Result{}, err
 	}
 

@@ -46,10 +46,6 @@ type ServiceBindingSpec struct {
 	// Parameters for the binding
 	// +optional
 	Parameters *runtime.RawExtension `json:"parameters,omitempty"`
-
-	// Custom binding labels stored in Service Manager
-	// +optional
-	Labels types.Labels `json:"labels,omitempty"`
 }
 
 //TODO review spec and status with UA
