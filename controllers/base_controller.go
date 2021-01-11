@@ -344,7 +344,3 @@ func isInProgress(object servicesv1alpha1.SAPCPResource) bool {
 		conditions[0].Type == servicesv1alpha1.ConditionReady &&
 		conditions[0].Status == metav1.ConditionFalse
 }
-
-func isReady(resource servicesv1alpha1.SAPCPResource) bool {
-	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
-}
