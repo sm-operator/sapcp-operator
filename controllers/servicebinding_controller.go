@@ -108,7 +108,7 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, instanceErr
 	}
 
-	if serviceInProgress(serviceInstance) {
+	if isInProgress(serviceInstance) {
 		log.Info(fmt.Sprintf("Service instance with k8s name %s is not ready for binding yet", serviceInstance.Name))
 
 		setInProgressCondition(smTypes.CREATE, fmt.Sprintf("Referenced service instance with k8s name %s is not ready, cannot create binding yet", serviceBinding.Spec.ServiceInstanceName),
@@ -398,20 +398,6 @@ func bindingAlreadyOwnedByInstance(instance *v1alpha1.ServiceInstance, binding *
 
 func serviceNotUsable(instance *v1alpha1.ServiceInstance) bool {
 	return isDelete(instance.ObjectMeta) || instance.Status.Conditions[0].Reason == getConditionReason(smTypes.CREATE, smTypes.FAILED)
-}
-
-func serviceInProgress(instance *v1alpha1.ServiceInstance) bool {
-	if instance.Status.InstanceID != "" && len(instance.Status.Conditions) == 1 && instance.Status.Conditions[0].Status == metav1.ConditionFalse {
-		// instance is in progress
-		return true
-	}
-
-	if instance.Status.InstanceID == "" && len(instance.Status.Conditions) == 0 {
-		// instance waiting for recovery
-		return true
-	}
-
-	return false
 }
 
 func (r *ServiceBindingReconciler) getServiceInstanceForBinding(ctx context.Context, binding *v1alpha1.ServiceBinding) (*v1alpha1.ServiceInstance, error) {

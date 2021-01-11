@@ -152,9 +152,10 @@ func (r *BaseReconciler) updateStatusWithRetries(ctx context.Context, object ser
 	if err = r.Status().Update(ctx, object); err != nil {
 		logFailedAttempt(1, err)
 		for i := 2; i <= 3; i++ {
-			if err = r.updateStatus(ctx, object, log); err != nil {
-				logFailedAttempt(i, err)
+			if err = r.updateStatus(ctx, object, log); err == nil {
+				break
 			}
+			logFailedAttempt(i, err)
 		}
 	}
 
@@ -342,4 +343,8 @@ func isInProgress(object servicesv1alpha1.SAPCPResource) bool {
 	return len(conditions) == 1 &&
 		conditions[0].Type == servicesv1alpha1.ConditionReady &&
 		conditions[0].Status == metav1.ConditionFalse
+}
+
+func isReady(resource servicesv1alpha1.SAPCPResource) bool {
+	return len(resource.GetConditions()) == 1 && resource.GetConditions()[0].Status == metav1.ConditionTrue
 }
