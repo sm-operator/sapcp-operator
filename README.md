@@ -21,9 +21,9 @@ With the SAPCP Operator, you can provision and bind SAPCP services to your Kuber
     * [Binding properties](#binding-properties)    
 
 ## Prerequisites
-- kubernetes cluster
-- kubectl
-- helm
+- [kubernetes cluster](https://kubernetes.io/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+- [helm](https://helm.sh/)
 </br></br>
 [Back to top](#sapcp-operator)
 
