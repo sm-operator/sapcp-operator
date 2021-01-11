@@ -6,11 +6,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Label struct {
-	Key   string   `json:"key"`
-	Value []string `json:"value"`
-}
-
 type ControllerName string
 
 const (

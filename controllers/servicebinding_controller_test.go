@@ -75,7 +75,7 @@ var _ = Describe("ServiceBinding controller", func() {
 			if wait {
 				return isReady(createdBinding) || isFailed(createdBinding)
 			} else {
-				return len(createdBinding.Status.Conditions) > 0
+				return len(createdBinding.Status.Conditions) > 0 && createdBinding.Status.Conditions[0].Message != "Pending"
 			}
 		}, timeout*2, interval).Should(BeTrue())
 		return createdBinding, nil

@@ -68,10 +68,11 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return r.deleteInstance(ctx, serviceInstance, log)
 	}
 	// The object is not being deleted, so if it does not have our finalizer,
-	// then lets add the finalizer and update the object. This is equivalent
-	// registering our finalizer.
-	if err := r.addFinalizer(ctx, serviceInstance, instanceFinalizerName, log); err != nil {
-		return ctrl.Result{}, err
+	// then lets init it
+	if !controllerutil.ContainsFinalizer(serviceInstance, instanceFinalizerName) {
+		if err := r.init(ctx, instanceFinalizerName, log, serviceInstance); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if serviceInstance.Generation == serviceInstance.Status.ObservedGeneration && !isInProgress(serviceInstance) {
@@ -86,7 +87,7 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
 			setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
@@ -98,7 +99,7 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if err != nil {
 			log.Error(err, "failed to check instance recovery")
 			setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
@@ -106,7 +107,7 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if instance != nil {
 			log.Info(fmt.Sprintf("found existing instance in SM with id %s, updating status", instance.ID))
 			r.resyncInstanceStatus(serviceInstance, instance)
-			err := r.updateStatus(ctx, serviceInstance, log)
+			err := r.updateStatusWithRetries(ctx, serviceInstance, log)
 			return ctrl.Result{}, err
 		}
 
@@ -141,7 +142,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 			freshStatus.InstanceID = serviceInstance.Status.InstanceID
 		}
 		serviceInstance.Status = freshStatus
-		if err = r.updateStatus(ctx, serviceInstance, log); err != nil {
+		if err = r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 			log.Error(err, "failed to update status during polling")
 		}
 		return ctrl.Result{}, statusErr
@@ -158,7 +159,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 		if serviceInstance.Status.OperationType == smTypes.DELETE {
 			serviceInstance.Status.OperationURL = ""
 			serviceInstance.Status.OperationType = ""
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 				return ctrl.Result{}, err
 			}
 			errMsg := "Async deprovision operation failed"
@@ -180,7 +181,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 	serviceInstance.Status.OperationURL = ""
 	serviceInstance.Status.OperationType = ""
 
-	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+	if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -223,7 +224,7 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 		serviceInstance.Status.OperationURL = operationURL
 		serviceInstance.Status.OperationType = smTypes.CREATE
 		setInProgressCondition(smTypes.CREATE, "", serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -232,7 +233,7 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	log.Info("Instance provisioned successfully")
 	setSuccessConditions(smTypes.CREATE, serviceInstance)
 	serviceInstance.Status.InstanceID = smInstanceID
-	if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+	if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -268,7 +269,7 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 		serviceInstance.Status.OperationType = smTypes.UPDATE
 		setInProgressCondition(smTypes.UPDATE, "", serviceInstance)
 
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -276,7 +277,7 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 	}
 	log.Info("Instance updated successfully")
 	setSuccessConditions(smTypes.UPDATE, serviceInstance)
-	err = r.updateStatus(ctx, serviceInstance, log)
+	err = r.updateStatusWithRetries(ctx, serviceInstance, log)
 	return ctrl.Result{}, err
 }
 
@@ -302,7 +303,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 			}
 
 			setFailureConditions(smTypes.DELETE, fmt.Sprintf("failed to delete instance %s: %s", serviceInstance.Status.InstanceID, deprovisionErr.Error()), serviceInstance)
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, deprovisionErr
@@ -314,7 +315,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 			serviceInstance.Status.OperationType = smTypes.DELETE
 			setInProgressCondition(smTypes.DELETE, "", serviceInstance)
 
-			if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+			if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -323,7 +324,7 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 		log.Info("Instance was deleted successfully")
 		serviceInstance.Status.InstanceID = ""
 		setSuccessConditions(smTypes.DELETE, serviceInstance)
-		if err := r.updateStatus(ctx, serviceInstance, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
 			return ctrl.Result{}, err
 		}
 
