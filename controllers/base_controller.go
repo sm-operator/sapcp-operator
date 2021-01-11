@@ -143,19 +143,24 @@ func (r *BaseReconciler) addFinalizer(ctx context.Context, object servicesv1alph
 }
 
 func (r *BaseReconciler) updateStatusWithRetries(ctx context.Context, object servicesv1alpha1.SAPCPResource, log logr.Logger) error {
-	retries := 1
-	log.Info(fmt.Sprintf("updating %s status with retries", object.GetControllerName()))
-	if err := r.Status().Update(ctx, object); err != nil {
+	logFailedAttempt := func(retries int, err error) {
 		log.Info(fmt.Sprintf("failed to update status of %s attempt #%v, %s", object.GetControllerName(), retries, err.Error()))
-		retries++
-		if err = r.updateStatus(ctx, object, log); err != nil {
-			log.Info(fmt.Sprintf("failed to update status of %s attempt #%v, %s", object.GetControllerName(), retries, err.Error()))
-			retries++
+	}
+
+	log.Info(fmt.Sprintf("updating %s status with retries", object.GetControllerName()))
+	var err error
+	if err = r.Status().Update(ctx, object); err != nil {
+		logFailedAttempt(1, err)
+		for i := 0; i < 2; i++ {
 			if err = r.updateStatus(ctx, object, log); err != nil {
-				log.Info(fmt.Sprintf("failed to update status of %s attempt #%v giving up!!, %s", object.GetControllerName(), retries, err.Error()))
-				return err
+				logFailedAttempt(i+2, err)
 			}
 		}
+	}
+
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to update status of %s giving up!!", object.GetControllerName()))
+		return err
 	}
 
 	log.Info(fmt.Sprintf("updated %s status in k8s", object.GetControllerName()))
