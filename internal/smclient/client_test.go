@@ -880,4 +880,26 @@ var _ = Describe("Client test", func() {
 		Expect(opUrl).To(Equal("/v1/service_instances/1234/operations/5678"))
 	})
 
+	When("checking status of existing op", func() {
+		var operation *types.Operation
+		BeforeEach(func() {
+			operation = &types.Operation{
+				ID:         "operation-id",
+				Type:       "create",
+				State:      "failed",
+				ResourceID: "1234",
+			}
+			responseBody, _ := json.Marshal(operation)
+			handlerDetails = []HandlerDetails{
+				{Method: http.MethodGet, Path: web.ServiceInstancesURL + "/", ResponseBody: responseBody, ResponseStatusCode: http.StatusOK},
+			}
+		})
+
+		It("should return it", func() {
+			result, err := client.Status(web.ServiceInstancesURL+"/1234/"+operation.ID, params)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).To(Equal(operation))
+		})
+	})
+
 })
