@@ -155,8 +155,8 @@ move its executable file to anywhere on your ``PATH``
 ### Service Instance Properties
 | Parameter             | Type       | Comments                                                                                                   |
 |:-----------------|:---------|:-----------------------------------------------------------------------------------------------------------|
-| serviceOfferingName   `*`   | `string`   | SAPCP service offering name |
-| servicePlanName  `*` | `string`   |  The plan to use for the service instance, such as `free` or `standard`. |
+| serviceOfferingName`*`   | `string`   | SAPCP service offering name |
+| servicePlanName`*` | `string`   |  The plan to use for the service instance, such as `free` or `standard`. |
 | servicePlanID   |  `string`   |  The plan ID in case service offering and plan name are ambiguous |
 | externalName       | `string`   |  The name for the service instance in SAPCP |
 | parameters       |  `[]object`  |  Provisioning parameters for the instance |
@@ -164,7 +164,7 @@ move its executable file to anywhere on your ``PATH``
 ### Binding Properties
 | Parameter             | Type       | Comments                                                                                                   |
 |:-----------------|:---------|:-----------------------------------------------------------------------------------------------------------|
-| serviceInstanceName   `*`   | `string`   | The k8s name of the service instance to bind, should be in the namespace of the binding |
+| serviceInstanceName `*`   | `string`   | The k8s name of the service instance to bind, should be in the namespace of the binding |
 | servicePlanID   |  `string`   |  The plan ID in case service offering and plan name are ambiguous |
 | externalName       | `string`   |  The name for the service binding in SAPCP |
 | secretName       | `string`   |  the name of the secret where credentials will be stored |
