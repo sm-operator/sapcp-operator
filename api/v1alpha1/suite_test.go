@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"testing"
 )
 
@@ -25,6 +26,7 @@ func getBinding() *ServiceBinding {
 		Spec: ServiceBindingSpec{
 			ServiceInstanceName: "service-instance-1",
 			ExternalName:        "my-service-binding-1",
+			Parameters:          &runtime.RawExtension{Raw: []byte(`{"key":"val"}`)},
 		},
 
 		Status: ServiceBindingStatus{},
@@ -46,6 +48,7 @@ func getInstance() *ServiceInstance {
 			ServicePlanName:     "service-plan-name-1",
 			ServicePlanID:       "service-plan-id-1",
 			ExternalName:        "my-service-instance-1",
+			Parameters:          &runtime.RawExtension{Raw: []byte(`{"key":"val"}`)},
 		},
 
 		Status: ServiceInstanceStatus{},
