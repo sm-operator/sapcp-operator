@@ -167,7 +167,7 @@ move its executable file to anywhere on your ``PATH``
 | serviceInstanceName`*`   | `string`   | The k8s name of the service instance to bind, should be in the namespace of the binding |
 | servicePlanID   |  `string`   |  The plan ID in case service offering and plan name are ambiguous |
 | externalName       | `string`   |  The name for the service binding in SAPCP |
-| secretName       | `string`   |  the name of the secret where credentials will be stored |
-| parameters       |  `[]object`  |  Provisioning parameters for the instance |
+| secretName       | `string`   |  The name of the secret where credentials will be stored |
+| parameters       |  `[]object`  |  Parameters for the binding |
 
 [Back to top](#sapcp-operator)
