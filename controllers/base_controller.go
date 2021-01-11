@@ -151,9 +151,9 @@ func (r *BaseReconciler) updateStatusWithRetries(ctx context.Context, object ser
 	var err error
 	if err = r.Status().Update(ctx, object); err != nil {
 		logFailedAttempt(1, err)
-		for i := 0; i < 2; i++ {
+		for i := 2; i <= 3; i++ {
 			if err = r.updateStatus(ctx, object, log); err != nil {
-				logFailedAttempt(i+2, err)
+				logFailedAttempt(i, err)
 			}
 		}
 	}
@@ -305,10 +305,10 @@ func isDelete(object metav1.ObjectMeta) bool {
 	return !object.DeletionTimestamp.IsZero()
 }
 
-func isTransientError(err error) bool {
+func isTransientError(err error, log logr.Logger) bool {
 	if smError, ok := err.(*smclient.ServiceManagerError); ok {
-		return smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusBadGateway ||
-			smError.StatusCode == http.StatusServiceUnavailable || smError.StatusCode == http.StatusGatewayTimeout
+		log.Info(fmt.Sprintf("SM returned error status code %d", smError.StatusCode))
+		return smError.StatusCode == http.StatusTooManyRequests || smError.StatusCode == http.StatusServiceUnavailable || smError.StatusCode == http.StatusGatewayTimeout
 	}
 	return false
 }
