@@ -20,7 +20,8 @@ With the SAPCP Operator, you can provision and bind SAPCP services to your Kuber
 ## Prerequisites
 - kubernetes cluster
 - kubectl
-- helm</br>
+- helm
+</br></br>
 [Back to top](#sapcp-operator)
 
 ## Setup
@@ -40,7 +41,8 @@ With the SAPCP Operator, you can provision and bind SAPCP services to your Kuber
         --set manager.secret.tokenurl=$tokenurl
     ```
 
-    The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)</br>
+    The list of available releases is available here: [sapcp-operator releases](https://github.com/sm-operator/sapcp-operator/releases)
+</br></br>
 [Back to top](#sapcp-operator)
 
 ## Local setup
@@ -57,7 +59,7 @@ make deploy
 ```
 ### Run tests
 `make test`
-</br>
+</br></br>
 [Back to top](#sapcp-operator)
 
 ## SAPCP kubectl extension (experimental) 
