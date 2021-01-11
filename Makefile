@@ -48,7 +48,7 @@ deploy: manifests helm-charts
 	helm upgrade --install sapcp-operator ./sapcp-operator-charts \
         --create-namespace \
         --namespace=sapcp-operator \
-        --values=hack/override_vlues.yaml
+        --values=hack/override_values.yaml
 		--set manager.image.repository=controller \
 		--set manager.image.tag=latest
 
