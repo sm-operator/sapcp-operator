@@ -107,8 +107,7 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if instance != nil {
 			log.Info(fmt.Sprintf("found existing instance in SM with id %s, updating status", instance.ID))
 			r.resyncInstanceStatus(serviceInstance, instance)
-			err := r.updateStatusWithRetries(ctx, serviceInstance, log)
-			return ctrl.Result{}, err
+			return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceInstance, log)
 		}
 
 		//if instance was not recovered then create new instance
@@ -181,10 +180,7 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 	serviceInstance.Status.OperationURL = ""
 	serviceInstance.Status.OperationType = ""
 
-	if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceInstance, log)
 }
 
 func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
@@ -233,11 +229,8 @@ func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceI
 	log.Info("Instance provisioned successfully")
 	setSuccessConditions(smTypes.CREATE, serviceInstance)
 	serviceInstance.Status.InstanceID = smInstanceID
-	if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
-		return ctrl.Result{}, err
-	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceInstance, log)
 }
 
 func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
@@ -277,8 +270,7 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 	}
 	log.Info("Instance updated successfully")
 	setSuccessConditions(smTypes.UPDATE, serviceInstance)
-	err = r.updateStatusWithRetries(ctx, serviceInstance, log)
-	return ctrl.Result{}, err
+	return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceInstance, log)
 }
 
 func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
@@ -341,8 +333,14 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 }
 
 func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1alpha1.ServiceInstance, smInstance *types.ServiceInstance) {
-	//set observed generation to 0 because we dont know which generation the current state in SM represents
-	k8sInstance.Status.ObservedGeneration = 0
+	//set observed generation to 0 because we dont know which generation the current state in SM represents,
+	//unless the generation is 1 and SM is in the same state as operator
+	if k8sInstance.Generation == 1 {
+		k8sInstance.SetObservedGeneration(1)
+	} else {
+		k8sInstance.SetObservedGeneration(0)
+	}
+
 	k8sInstance.Status.InstanceID = smInstance.ID
 	k8sInstance.Status.OperationURL = ""
 	k8sInstance.Status.OperationType = ""

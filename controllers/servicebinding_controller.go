@@ -143,15 +143,15 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				// store secret unless binding is still being created or failed during creation
 				if err := r.storeBindingSecret(ctx, serviceBinding, binding, log); err != nil {
 					setFailureConditions(binding.LastOperation.Type, err.Error(), serviceBinding)
+					if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
+						return ctrl.Result{}, err
+					}
 					return ctrl.Result{}, err
 				}
 			}
 			r.resyncBindingStatus(serviceBinding, binding, serviceInstance.Status.InstanceID)
-			if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
-				return ctrl.Result{}, err
-			}
 
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
 		}
 		return r.createBinding(ctx, smClient, serviceInstance, serviceBinding, log)
 	}
@@ -229,11 +229,8 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	setSuccessConditions(smTypes.CREATE, serviceBinding)
 	serviceBinding.Status.BindingID = smBinding.ID
 	log.Info("Updating binding", "bindingID", smBinding.ID)
-	if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
-		return ctrl.Result{}, err
-	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
 }
 
 func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
@@ -356,8 +353,7 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 	serviceBinding.Status.OperationURL = ""
 	serviceBinding.Status.OperationType = ""
 
-	err = r.updateStatusWithRetries(ctx, serviceBinding, log)
-	return ctrl.Result{}, err
+	return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
 }
 
 func (r *ServiceBindingReconciler) SetOwner(ctx context.Context, serviceInstance *v1alpha1.ServiceInstance, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) error {
