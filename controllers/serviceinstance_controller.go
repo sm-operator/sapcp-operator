@@ -333,8 +333,14 @@ func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceI
 }
 
 func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1alpha1.ServiceInstance, smInstance *types.ServiceInstance) {
-	//set observed generation to 0 because we dont know which generation the current state in SM represents
-	k8sInstance.Status.ObservedGeneration = 0
+	//set observed generation to 0 because we dont know which generation the current state in SM represents,
+	//unless the generation is 1 and SM is in the same state as operator
+	if k8sInstance.Generation == 1 {
+		k8sInstance.SetObservedGeneration(1)
+	} else {
+		k8sInstance.SetObservedGeneration(0)
+	}
+
 	k8sInstance.Status.InstanceID = smInstance.ID
 	k8sInstance.Status.OperationURL = ""
 	k8sInstance.Status.OperationType = ""
@@ -347,9 +353,6 @@ func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1
 		setInProgressCondition(smInstance.LastOperation.Type, smInstance.LastOperation.Description, k8sInstance)
 	case smTypes.SUCCEEDED:
 		setSuccessConditions(smInstance.LastOperation.Type, k8sInstance)
-		if k8sInstance.Generation == 1 {
-			k8sInstance.Status.ObservedGeneration = 1
-		}
 	case smTypes.FAILED:
 		setFailureConditions(smInstance.LastOperation.Type, smInstance.LastOperation.Description, k8sInstance)
 	}
