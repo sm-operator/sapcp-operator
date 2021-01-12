@@ -355,6 +355,9 @@ func (r *ServiceInstanceReconciler) resyncInstanceStatus(k8sInstance *servicesv1
 		setInProgressCondition(smInstance.LastOperation.Type, smInstance.LastOperation.Description, k8sInstance)
 	case smTypes.SUCCEEDED:
 		setSuccessConditions(smInstance.LastOperation.Type, k8sInstance)
+		if k8sInstance.Generation == 1 {
+			k8sInstance.Status.ObservedGeneration = 1
+		}
 	case smTypes.FAILED:
 		setFailureConditions(smInstance.LastOperation.Type, smInstance.LastOperation.Description, k8sInstance)
 	}
