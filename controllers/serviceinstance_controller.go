@@ -72,9 +72,14 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, err
 	}
-	recovered, err := r.recoverIfNeeded(ctx, smClient, serviceInstance, log)
+	recovered, err := r.recoverIfNeeded(smClient, serviceInstance, log)
 	if err != nil {
-
+		if err := r.updateStatusWithRetries(ctx, serviceInstance, log); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.SyncPeriod}, nil
+	} else if recovered {
+		return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceInstance, log)
 	}
 
 	if isDelete(serviceInstance.ObjectMeta) {
@@ -109,21 +114,21 @@ func (r *ServiceInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 //try to recover the k8s instance with SM, return true if instance actually recovered and existed in SM
-func (r *ServiceInstanceReconciler) recoverIfNeeded(ctx context.Context, smClient smclient.Client, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (bool, error) {
+func (r *ServiceInstanceReconciler) recoverIfNeeded(smClient smclient.Client, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (bool, error) {
 	if serviceInstance.Status.InstanceID != "" || serviceInstance.Status.ObservedGeneration != 0 {
 		return false, nil
 	}
-	log.Info("Initiating recovery flow", "serviceInstanceID", serviceInstance.Status.InstanceID, "observedGeneration", serviceInstance.Status.ObservedGeneration)
+	log.Info("Checking if instance exists in SM", "serviceInstanceID", serviceInstance.Status.InstanceID, "observedGeneration", serviceInstance.Status.ObservedGeneration)
 	instance, err := r.getInstanceForRecovery(smClient, serviceInstance, log)
 	if err != nil {
 		log.Error(err, "failed to check instance recovery")
 		setFailureConditions(smTypes.CREATE, err.Error(), serviceInstance)
-		return false, r.updateStatusWithRetries(ctx, serviceInstance, log)
+		return false, err
 	}
 	if instance != nil {
 		log.Info(fmt.Sprintf("found existing instance in SM with id %s, updating status", instance.ID))
 		r.resyncInstanceStatus(serviceInstance, instance)
-		return true, r.updateStatusWithRetries(ctx, serviceInstance, log)
+		return true, nil
 	}
 	return false, nil
 }
