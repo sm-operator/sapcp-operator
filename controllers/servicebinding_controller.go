@@ -235,7 +235,24 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 
 func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
 	if controllerutil.ContainsFinalizer(serviceBinding, bindingFinalizerName) {
+		smClient, err := r.getSMClient(ctx, log, serviceBinding)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 		if len(serviceBinding.Status.BindingID) == 0 {
+			log.Info("No binding id found validating binding does not exists in SM before removing finalizer")
+			smBinding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if smBinding != nil {
+				log.Info("binding exists in SM continue with deletion")
+				serviceBinding.Status.BindingID = smBinding.ID
+				setInProgressCondition(smTypes.DELETE, "delete after recovery", serviceBinding)
+				return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
+			}
+
 			// make sure there's no secret stored for the binding
 			if err := r.deleteBindingSecret(ctx, serviceBinding, log); err != nil {
 				return ctrl.Result{}, err
@@ -246,12 +263,6 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
-		}
-
-		// our finalizer is present, so we need to delete the binding in SM
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
-		if err != nil {
-			return ctrl.Result{}, err
 		}
 
 		log.Info(fmt.Sprintf("Deleting binding with id %v from SM", serviceBinding.Status.BindingID))

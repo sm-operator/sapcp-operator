@@ -26,6 +26,10 @@ var _ = Describe("Service Binding Type Test", func() {
 
 		clonedSpec := binding.Spec.DeepCopy()
 		Expect(&binding.Spec).To(Equal(clonedSpec))
+
+		list := &ServiceBindingList{Items: []ServiceBinding{*binding}}
+		clonedList := list.DeepCopy()
+		Expect(list).To(Equal(clonedList))
 	})
 
 	It("should clone into correctly", func() {
@@ -40,6 +44,11 @@ var _ = Describe("Service Binding Type Test", func() {
 		clonedSpec := &ServiceBindingSpec{}
 		binding.Spec.DeepCopyInto(clonedSpec)
 		Expect(&binding.Spec).To(Equal(clonedSpec))
+
+		list := &ServiceBindingList{Items: []ServiceBinding{*binding}}
+		clonedList := &ServiceBindingList{}
+		list.DeepCopyInto(clonedList)
+		Expect(list).To(Equal(clonedList))
 	})
 
 })
