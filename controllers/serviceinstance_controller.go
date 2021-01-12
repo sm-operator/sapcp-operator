@@ -184,7 +184,6 @@ func (r *ServiceInstanceReconciler) poll(ctx context.Context, serviceInstance *s
 }
 
 func (r *ServiceInstanceReconciler) createInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger, smClient smclient.Client) (ctrl.Result, error) {
-
 	log.Info("Creating instance in SM")
 	instanceParameters, err := getParameters(serviceInstance)
 	if err != nil {
@@ -275,16 +274,26 @@ func (r *ServiceInstanceReconciler) updateInstance(ctx context.Context, serviceI
 
 func (r *ServiceInstanceReconciler) deleteInstance(ctx context.Context, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (ctrl.Result, error) {
 	if controllerutil.ContainsFinalizer(serviceInstance, instanceFinalizerName) {
-		if len(serviceInstance.Status.InstanceID) == 0 {
-			log.Info("instance does not exists in SM, removing finalizer")
-			err := r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName, log)
-			return ctrl.Result{}, err
-		}
-
-		// our finalizer is present, so we need to delete the instance in SM
 		smClient, err := r.getSMClient(ctx, log, serviceInstance)
 		if err != nil {
 			return ctrl.Result{}, err
+		}
+
+		if len(serviceInstance.Status.InstanceID) == 0 {
+			log.Info("No instance id found validating instance does not exists in SM before removing finalizer")
+
+			smInstance, err := r.getInstanceForRecovery(smClient, serviceInstance, log)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if smInstance != nil {
+				log.Info("instance exists in SM continue with deletion")
+				serviceInstance.Status.InstanceID = smInstance.ID
+				setInProgressCondition(smTypes.DELETE, "delete after recovery", serviceInstance)
+				return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceInstance, log)
+			}
+			log.Info("instance does not exists in SM, removing finalizer")
+			return ctrl.Result{}, r.removeFinalizer(ctx, serviceInstance, instanceFinalizerName, log)
 		}
 
 		log.Info(fmt.Sprintf("Deleting instance with id %v from SM", serviceInstance.Status.InstanceID))
