@@ -606,27 +606,65 @@ var _ = Describe("ServiceInstance controller", func() {
 
 	Context("Recovery", func() {
 		When("instance exists in SM", func() {
+			revocveredInstance := smclientTypes.ServiceInstance{
+				ID:            fakeInstanceID,
+				Name:          fakeInstanceName,
+				LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
+			}
 			BeforeEach(func() {
 				fakeClient.ProvisionReturns("", "", fmt.Errorf("ERROR"))
-				fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
-					ServiceInstances: []smclientTypes.ServiceInstance{
-						{
-
-							ID:            fakeInstanceID,
-							Name:          fakeInstanceName,
-							LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE},
-						},
-					},
-				}, nil)
 			})
 			AfterEach(func() {
 				fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{ServiceInstances: []smclientTypes.ServiceInstance{}}, nil)
 			})
 
-			It("should recover the existing instance", func() {
-				serviceInstance = createInstance(ctx, instanceSpec)
-				Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
-				Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
+			When("last operation state is SUCCEEDED", func() {
+				BeforeEach(func() {
+					revocveredInstance.LastOperation = &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}
+					fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
+						ServiceInstances: []smclientTypes.ServiceInstance{revocveredInstance}}, nil)
+				})
+				It("should recover the existing instance", func() {
+					serviceInstance = createInstance(ctx, instanceSpec)
+					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
+					Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
+				})
+			})
+
+			When("last operation state is PENDING and ends with success", func() {
+				BeforeEach(func() {
+					revocveredInstance.LastOperation = &smTypes.Operation{State: smTypes.PENDING, Type: smTypes.CREATE}
+					fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
+						ServiceInstances: []smclientTypes.ServiceInstance{revocveredInstance}}, nil)
+					fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeInstanceID, State: string(smTypes.PENDING), Type: string(smTypes.CREATE)}, nil)
+				})
+				It("should recover the existing instance and poll until instance is ready", func() {
+					serviceInstance = createInstance(ctx, instanceSpec)
+					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
+					Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
+					Expect(serviceInstance.Status.Conditions[0].Reason).To(Equal(CreateInProgress))
+					fakeClient.StatusReturns(&smclientTypes.Operation{ResourceID: fakeInstanceID, State: string(smTypes.SUCCEEDED), Type: string(smTypes.CREATE)}, nil)
+					Eventually(func() bool {
+						Expect(k8sClient.Get(ctx, defaultLookupKey, serviceInstance)).Should(Succeed())
+						return isReady(serviceInstance)
+					})
+				})
+			})
+
+			When("last operation state is FAILED", func() {
+				BeforeEach(func() {
+					revocveredInstance.LastOperation = &smTypes.Operation{State: smTypes.FAILED, Type: smTypes.CREATE}
+					fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{
+						ServiceInstances: []smclientTypes.ServiceInstance{revocveredInstance}}, nil)
+				})
+				It("should recover the existing instance and update condition failure", func() {
+					serviceInstance = createInstance(ctx, instanceSpec)
+					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
+					Expect(fakeClient.ProvisionCallCount()).To(Equal(0))
+					Expect(len(serviceInstance.Status.Conditions)).To(Equal(2))
+					Expect(serviceInstance.Status.Conditions[0].Reason).To(Equal(CreateFailed))
+
+				})
 			})
 		})
 	})
