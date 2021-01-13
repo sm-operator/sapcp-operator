@@ -3,17 +3,17 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/sm-operator/sapcp-operator/blob/master/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sm-operator/sapcp-operator)](https://goreportcard.com/report/github.com/sm-operator/sapcp-operator)
 
-# SAPCP Operator
+# SAP Cloud Platform Service Operator
 
 
-With the SAPCP Operator, you can provision and bind SAPCP services to your Kubernetes cluster in a Kubernetes-native way. The SAPCP Operator is based on the [Kubernetes custom resource definition (CRD) API](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) so that your applications can create, update, and delete SAPCP services from within the cluster by calling Kubnernetes APIs.
+With the SAP Cloud Platform (SAP CP) Operator, you can provision and bind SAP CP services to your Kubernetes cluster in a Kubernetes-native way. The SAP CP Service Operator is based on the [Kubernetes custom resource definition (CRD) API](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) so that your applications can create, update, and delete SAP CP services from within the cluster by calling Kubnernetes APIs.
 
 ## Table of content
 * [Prerequisites](#prerequisites)
 * [Setup Operator](#setup)
 * [Local Setup](#local-setup)
-* [SAPCP kubectl extension](#sapcp-kubectl-extension-experimental)
-* [Using the SAPCP Operator](#using-the-sapcp-operator)
+* [SAP CP kubectl extension](#sapcp-kubectl-extension-experimental)
+* [Using the SAP CP Service Operator](#using-the-sapcp-operator)
     * [Creating a service instance](#step-1-creating-a-service-instance)
     * [Binding the service instance](#step-2-binding-the-service-instance)
 * [Reference documentation](#reference-documentation)
@@ -72,7 +72,7 @@ With the SAPCP Operator, you can provision and bind SAPCP services to your Kuber
 
 [Back to top](#sapcp-operator)
 
-## Using the SAPCP Operator
+## Using the SAP CP Service Operator
 
 #### Step 1: Create a service instance
 
