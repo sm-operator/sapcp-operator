@@ -80,6 +80,7 @@ type ServiceBindingStatus struct {
 // +kubebuilder:printcolumn:JSONPath=".spec.serviceInstanceName",name="Instance",type=string
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[0].reason",name="Status",type=string
 // +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name="Age",type=date
+// +kubebuilder:printcolumn:JSONPath=".status.bindingID",name="ID",type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[0].message",name="Message",type=string,priority=1
 
 // ServiceBinding is the Schema for the servicebindings API
