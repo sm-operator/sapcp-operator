@@ -18,6 +18,10 @@ spec:
   - JSONPath: .metadata.creationTimestamp
     name: Age
     type: date
+  - JSONPath: .status.bindingID
+    name: ID
+    priority: 1
+    type: string
   - JSONPath: .status.conditions[0].message
     name: Message
     priority: 1
