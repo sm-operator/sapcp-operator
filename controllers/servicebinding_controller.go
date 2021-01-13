@@ -66,13 +66,22 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 	serviceBinding = serviceBinding.DeepCopy()
 
+	smClient, err := r.getSMClient(ctx, log, serviceBinding)
+	if err != nil {
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
 	if len(serviceBinding.Status.OperationURL) > 0 {
 		// ongoing operation - poll status from SM
-		return r.poll(ctx, serviceBinding, log)
+		return r.poll(ctx, smClient, serviceBinding, log)
 	}
 
 	if isDelete(serviceBinding.ObjectMeta) {
-		return r.delete(ctx, serviceBinding, log)
+		return r.delete(ctx, smClient, serviceBinding, log)
 	}
 	// The object is not being deleted, so if it does not have our finalizer,
 	// then lets init it
@@ -121,10 +130,6 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if serviceBinding.Status.BindingID == "" {
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
 		binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
 		if binding == nil {
 			log.Info("getBindingForRecovery returned nil")
@@ -233,13 +238,8 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 	return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
 }
 
-func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
+func (r *ServiceBindingReconciler) delete(ctx context.Context, smClient smclient.Client, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
 	if controllerutil.ContainsFinalizer(serviceBinding, bindingFinalizerName) {
-		smClient, err := r.getSMClient(ctx, log, serviceBinding)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
 		if len(serviceBinding.Status.BindingID) == 0 {
 			log.Info("No binding id found validating binding does not exists in SM before removing finalizer")
 			smBinding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
@@ -298,13 +298,8 @@ func (r *ServiceBindingReconciler) delete(ctx context.Context, serviceBinding *v
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
+func (r *ServiceBindingReconciler) poll(ctx context.Context, smClient smclient.Client, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (ctrl.Result, error) {
 	log.Info(fmt.Sprintf("resource is in progress, found operation url %s", serviceBinding.Status.OperationURL))
-	smClient, err := r.getSMClient(ctx, log, serviceBinding)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	status, statusErr := smClient.Status(serviceBinding.Status.OperationURL, nil)
 	if statusErr != nil {
 		log.Info(fmt.Sprintf("failed to fetch operation, got error from SM: %s", statusErr.Error()), "operationURL", serviceBinding.Status.OperationURL)
@@ -316,7 +311,7 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, serviceBinding *v1a
 			freshStatus.BindingID = serviceBinding.Status.BindingID
 		}
 		serviceBinding.Status = freshStatus
-		if err = r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 			log.Error(err, "failed to update status during polling")
 		}
 		return ctrl.Result{}, statusErr
