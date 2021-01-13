@@ -515,10 +515,10 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 func (r *ServiceBindingReconciler) getBindingForRecovery(smClient smclient.Client, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (*smclientTypes.ServiceBinding, error) {
 	parameters := smclient.Parameters{
 		FieldQuery: []string{
-			fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName)},
+			fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName),
+			fmt.Sprintf("context/clusterid eq '%s'", r.Config.ClusterID),
+			fmt.Sprintf("context/namespace eq '%s'", serviceBinding.Namespace)},
 		LabelQuery: []string{
-			fmt.Sprintf("%s eq '%s'", clusterIDLabel, r.Config.ClusterID),
-			fmt.Sprintf("%s eq '%s'", namespaceLabel, serviceBinding.Namespace),
 			fmt.Sprintf("%s eq '%s'", k8sNameLabel, serviceBinding.Name)},
 		GeneralParams: []string{"attach_last_operations=true"},
 	}

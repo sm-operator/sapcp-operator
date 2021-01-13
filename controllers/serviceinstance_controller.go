@@ -376,10 +376,10 @@ func (r *ServiceInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *ServiceInstanceReconciler) getInstanceForRecovery(smClient smclient.Client, serviceInstance *servicesv1alpha1.ServiceInstance, log logr.Logger) (*types.ServiceInstance, error) {
 	parameters := smclient.Parameters{
 		FieldQuery: []string{
-			fmt.Sprintf("name eq '%s'", serviceInstance.Spec.ExternalName)},
+			fmt.Sprintf("name eq '%s'", serviceInstance.Spec.ExternalName),
+			fmt.Sprintf("context/clusterid eq '%s'", r.Config.ClusterID),
+			fmt.Sprintf("context/namespace eq '%s'", serviceInstance.Namespace)},
 		LabelQuery: []string{
-			fmt.Sprintf("%s eq '%s'", clusterIDLabel, r.Config.ClusterID),
-			fmt.Sprintf("%s eq '%s'", namespaceLabel, serviceInstance.Namespace),
 			fmt.Sprintf("%s eq '%s'", k8sNameLabel, serviceInstance.Name)},
 		GeneralParams: []string{"attach_last_operations=true"},
 	}
