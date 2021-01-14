@@ -145,13 +145,25 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 
 			if binding.LastOperation.Type != smTypes.CREATE || binding.LastOperation.State == smTypes.SUCCEEDED {
-				// store secret unless binding is still being created or failed during creation
-				if err := r.storeBindingSecret(ctx, serviceBinding, binding, log); err != nil {
+				secretExist, err := r.isSecretAlreadyExist(ctx, serviceBinding)
+				if err != nil {
 					setFailureConditions(binding.LastOperation.Type, err.Error(), serviceBinding)
 					if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
 						return ctrl.Result{}, err
 					}
 					return ctrl.Result{}, err
+				}
+				if !secretExist {
+					// store secret unless binding is still being created or failed during creation
+					if err := r.storeBindingSecret(ctx, serviceBinding, binding, log); err != nil {
+						setFailureConditions(binding.LastOperation.Type, err.Error(), serviceBinding)
+						if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
+							return ctrl.Result{}, err
+						}
+						return ctrl.Result{}, err
+					}
+				} else {
+					log.Info(fmt.Sprintf("secret with name %s already exist in namespace %s", serviceBinding.Name, serviceBinding.Namespace))
 				}
 			}
 			r.resyncBindingStatus(serviceBinding, binding, serviceInstance.Status.InstanceID)
@@ -349,6 +361,10 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, smClient smclient.C
 
 			if err := r.storeBindingSecret(ctx, serviceBinding, smBinding, log); err != nil {
 				log.Error(err, fmt.Sprintf("binding %s succeeded but could not store secret", serviceBinding.Status.BindingID))
+				setFailureConditions(smBinding.LastOperation.Type, err.Error(), serviceBinding)
+				if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
+					return ctrl.Result{}, err
+				}
 				return ctrl.Result{}, err
 			}
 		case smTypes.DELETE:
@@ -469,12 +485,7 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	log.Info("Creating binding secret")
 	if err := r.Create(ctx, secret); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			if err = r.Update(ctx, secret); err != nil {
-				logger.Error(err, "Failed to store binding secret")
-				return err
-			}
-		}
+		return err
 	}
 
 	return nil
@@ -549,4 +560,15 @@ func (r *ServiceBindingReconciler) removeBindingFromKubernetes(ctx context.Conte
 
 	// Stop reconciliation as the item is deleted
 	return ctrl.Result{}, nil
+}
+
+func (r *ServiceBindingReconciler) isSecretAlreadyExist(ctx context.Context, binding *v1alpha1.ServiceBinding) (bool, error) {
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: binding.Name, Namespace: binding.Namespace}, secret)
+	if err == nil {
+		return false, nil
+	}
+
+	return true, client.IgnoreNotFound(err)
+
 }
