@@ -209,7 +209,7 @@ using the access credentials stored in the cluster.
 - The SAP CP kubectl plugin is currently based on `bash`. If using Windows, you should use the SAP CP plugin commands from a linux shell (e.g. [Cygwin](https://www.cygwin.com/)).  
 
 ### Installation
-- Download https://github.com/sm-operator/sapcp-operator/releases/download/<release>/kubectl-sapcp
+- Download https://github.com/sm-operator/sapcp-operator/releases/download/$release/kubectl-sapcp
 - Move the executable file to anywhere on your `PATH`
 
 #### Usage
