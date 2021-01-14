@@ -56,9 +56,8 @@ _token() {
   local url=$(jq -r .data.url <<< "$secret" | base64 --decode)
   local clientid=$(jq -r .data.clientid <<< "$secret" | base64 --decode)
   local clientsecret=$(jq -r .data.clientsecret <<< "$secret" | base64 --decode)
-  local subdomain=$(jq -r .data.subdomain <<< "$secret" | base64 --decode)
-  local token_url=$(curl -s "$url"/v1/info?subdomain="${subdomain}" | jq -r .token_issuer_url)
-  local token=$(curl -X POST -d '{}' -Ss -u "${clientid}:${clientsecret}" "${token_url}/token?grant_type=client_credentials" | jq -r .access_token)
+  local token_url=$(jq -r .data.tokenurl <<< "$secret" | base64 --decode)
+  local token=$(curl -X POST -d '{}' -Ss -u "${clientid}:${clientsecret}" "${token_url}/oauth/token?grant_type=client_credentials" | jq -r .access_token)
   echo "$token"
 
 }
