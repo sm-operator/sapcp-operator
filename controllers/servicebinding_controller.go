@@ -455,13 +455,12 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: k8sBinding.Spec.SecretName,
-			// TODO annotations? labels?
+			Name:      k8sBinding.Spec.SecretName,
+			Labels:    map[string]string{"binding_id": k8sBinding.Status.BindingID},
 			Namespace: k8sBinding.Namespace,
 		},
 		Data: credentialsMap,
 	}
-
 	if err := controllerutil.SetControllerReference(k8sBinding, secret, r.Scheme); err != nil {
 		logger.Error(err, "Failed to set secret owner")
 		return err
@@ -470,13 +469,18 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 	log.Info("Creating binding secret")
 	if err := r.Create(ctx, secret); err != nil {
 		if apierrors.IsAlreadyExists(err) {
-			if err = r.Update(ctx, secret); err != nil {
-				logger.Error(err, "Failed to store binding secret")
+			//validate not belongs to another binding
+			currentSecret, err := r.getSecret(ctx, k8sBinding.Namespace, k8sBinding.Spec.SecretName)
+			if err != nil {
 				return err
 			}
+			if otherBindingID, ok := currentSecret.Labels["binding_id"]; otherBindingID != k8sBinding.Status.BindingID || !ok {
+				return fmt.Errorf("secret %s belongs to another binding %s", k8sBinding.Spec.SecretName, otherBindingID)
+			}
+		} else {
+			return err
 		}
 	}
-
 	return nil
 }
 
@@ -549,4 +553,10 @@ func (r *ServiceBindingReconciler) removeBindingFromKubernetes(ctx context.Conte
 
 	// Stop reconciliation as the item is deleted
 	return ctrl.Result{}, nil
+}
+
+func (r *ServiceBindingReconciler) getSecret(ctx context.Context, namespace string, name string) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, secret)
+	return secret, err
 }
