@@ -456,7 +456,7 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      k8sBinding.Spec.SecretName,
-			Labels:    map[string]string{"binding_id": k8sBinding.Status.BindingID},
+			Labels:    map[string]string{"binding": k8sBinding.Name},
 			Namespace: k8sBinding.Namespace,
 		},
 		Data: credentialsMap,
@@ -474,8 +474,8 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 			if err != nil {
 				return err
 			}
-			if otherBindingID, ok := currentSecret.Labels["binding_id"]; otherBindingID != k8sBinding.Status.BindingID || !ok {
-				return fmt.Errorf("secret %s belongs to another binding %s", k8sBinding.Spec.SecretName, otherBindingID)
+			if otherBindingName, ok := currentSecret.Labels["binding"]; otherBindingName != k8sBinding.Name || !ok {
+				return fmt.Errorf("secret %s belongs to another binding %s", k8sBinding.Spec.SecretName, otherBindingName)
 			}
 		} else {
 			return err
