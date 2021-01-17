@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
+	"strings"
 )
 
 // +kubebuilder:docs-gen:collapse=Imports
@@ -246,6 +247,45 @@ var _ = Describe("ServiceBinding controller", func() {
 				It("should fail", func() {
 					createBindingWithBlockedError(context.Background(), bindingName, otherNamespace, instanceName, "",
 						fmt.Sprintf("unable to find service instance"))
+				})
+			})
+
+			When("secret name is already taken", func() {
+				ctx := context.Background()
+				JustBeforeEach(func() {
+					Expect(k8sClient.Create(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "mysecret", Namespace: bindingTestNamespace}})).Should(Succeed())
+					By("Verify secret created")
+					bindingSecret := getSecret(ctx, "mysecret", bindingTestNamespace)
+					Expect(bindingSecret).ToNot(BeNil())
+				})
+				FIt("should fail the request and allow the user to replace secret name", func() {
+					binding := newBinding("newbinding", bindingTestNamespace)
+					binding.Spec.ServiceInstanceName = instanceName
+					binding.Spec.SecretName = "mysecret"
+
+					_ = k8sClient.Create(ctx, binding)
+					bindingLookupKey := types.NamespacedName{Name: binding.Name, Namespace: binding.Namespace}
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, bindingLookupKey, binding)
+						if err != nil {
+							return false
+						}
+						return isFailed(binding) && strings.Contains(binding.Status.Conditions[0].Message, "belongs to another binding")
+					}, timeout, interval).Should(BeTrue())
+
+					binding.Spec.SecretName = "mynewsecret"
+					Expect(k8sClient.Update(ctx, binding)).Should(Succeed())
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, bindingLookupKey, binding)
+						if err != nil {
+							return false
+						}
+						return isReady(binding)
+					}, timeout, interval).Should(BeTrue())
+
+					By("Verify binding secret created")
+					bindingSecret := getSecret(ctx, binding.Spec.SecretName, binding.Namespace)
+					Expect(bindingSecret).ToNot(BeNil())
 				})
 			})
 		})
