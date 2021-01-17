@@ -258,7 +258,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					bindingSecret := getSecret(ctx, "mysecret", bindingTestNamespace)
 					Expect(bindingSecret).ToNot(BeNil())
 				})
-				FIt("should fail the request and allow the user to replace secret name", func() {
+				It("should fail the request and allow the user to replace secret name", func() {
 					binding := newBinding("newbinding", bindingTestNamespace)
 					binding.Spec.ServiceInstanceName = instanceName
 					binding.Spec.SecretName = "mysecret"
