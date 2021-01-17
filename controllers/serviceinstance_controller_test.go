@@ -657,6 +657,18 @@ var _ = Describe("ServiceInstance controller", func() {
 				fakeClient.ListInstancesReturns(&smclientTypes.ServiceInstances{ServiceInstances: []smclientTypes.ServiceInstance{}}, nil)
 			})
 
+			It("should call correctly to SM", func() {
+				serviceInstance = createInstance(ctx, instanceSpec)
+				smCallArgs := fakeClient.ListInstancesArgsForCall(0)
+				Expect(smCallArgs.LabelQuery).To(HaveLen(1))
+				Expect(smCallArgs.LabelQuery[0]).To(ContainSubstring("_k8sname"))
+
+				Expect(smCallArgs.FieldQuery).To(HaveLen(3))
+				Expect(smCallArgs.FieldQuery[0]).To(ContainSubstring("name"))
+				Expect(smCallArgs.FieldQuery[1]).To(ContainSubstring("context/clusterid"))
+				Expect(smCallArgs.FieldQuery[2]).To(ContainSubstring("context/namespace"))
+			})
+
 			Context("last operation is CREATE/UPDATE", func() {
 				When("last operation state is SUCCEEDED", func() {
 					BeforeEach(func() {
