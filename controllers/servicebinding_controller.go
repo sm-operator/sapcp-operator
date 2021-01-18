@@ -130,6 +130,12 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if serviceBinding.Status.BindingID == "" {
+		err := r.validateSecretNameIsAvailable(ctx, serviceBinding)
+		if err != nil {
+			setBlockedCondition(err.Error(), serviceBinding)
+			return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
+		}
+
 		binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
 		if binding == nil {
 			log.Info("getBindingForRecovery returned nil")
@@ -468,16 +474,7 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	log.Info("Creating binding secret")
 	if err := r.Create(ctx, secret); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			//validate not belongs to another binding
-			currentSecret, err := r.getSecret(ctx, k8sBinding.Namespace, k8sBinding.Spec.SecretName)
-			if err != nil {
-				return err
-			}
-			if otherBindingName, ok := currentSecret.Labels["binding"]; otherBindingName != k8sBinding.Name || !ok {
-				return fmt.Errorf("secret %s belongs to another binding %s", k8sBinding.Spec.SecretName, otherBindingName)
-			}
-		} else {
+		if !apierrors.IsAlreadyExists(err) {
 			return err
 		}
 	}
@@ -559,4 +556,15 @@ func (r *ServiceBindingReconciler) getSecret(ctx context.Context, namespace stri
 	secret := &corev1.Secret{}
 	err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, secret)
 	return secret, err
+}
+
+func (r *ServiceBindingReconciler) validateSecretNameIsAvailable(ctx context.Context, binding *v1alpha1.ServiceBinding) error {
+	currentSecret, err := r.getSecret(ctx, binding.Namespace, binding.Spec.SecretName)
+	if err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if otherBindingName, ok := currentSecret.Labels["binding"]; otherBindingName != binding.Name || !ok {
+		return fmt.Errorf("secret %s belongs to another binding %s", binding.Spec.SecretName, otherBindingName)
+	}
+	return nil
 }
