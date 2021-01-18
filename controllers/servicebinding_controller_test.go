@@ -255,8 +255,10 @@ var _ = Describe("ServiceBinding controller", func() {
 				JustBeforeEach(func() {
 					Expect(k8sClient.Create(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "mysecret", Namespace: bindingTestNamespace}})).Should(Succeed())
 					By("Verify secret created")
-					bindingSecret := getSecret(ctx, "mysecret", bindingTestNamespace)
-					Expect(bindingSecret).ToNot(BeNil())
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, types.NamespacedName{Name: "mysecret", Namespace: bindingTestNamespace}, &v1.Secret{})
+						return err == nil
+					}, timeout, interval).Should(BeTrue())
 				})
 				It("should fail the request and allow the user to replace secret name", func() {
 					binding := newBinding("newbinding", bindingTestNamespace)
