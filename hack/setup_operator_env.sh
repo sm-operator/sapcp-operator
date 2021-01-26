@@ -71,7 +71,7 @@ EOT
 }
 
 usage="SAP CP Operator Setup
-namespace parameter indicates the namespace where SM secret can be found
+namespace parameter indicates the namespace where SM secret can be found, default namespace is 'operators'
 Usage:
   setup_operator_env <clientid> <clientsecret> <url> <tokenurl> -n <namespace>
 "
@@ -81,7 +81,7 @@ if [ "$#" -lt 4 ]; then
   exit 1
 fi
 
-namespace="default"
+namespace="operators"
 clientid=$1
 clientsecret=$2
 url=$3
