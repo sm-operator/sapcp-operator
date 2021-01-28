@@ -4,7 +4,7 @@
 
 manager:
   secret:
-    clientid: sb-b781311c-55c3-4ae9-909d-9d4f2bba1beb!b1218|service-manager!b3
-    clientsecret: V9Wph9U2oWjqXcK0iV7mfnJWHSA=
-    url: https://service-manager.cfapps.staginggcp.hanavlab.ondemand.com
-    tokenurl: https://maradona.authentication.staginggcp.hanavlab.ondemand.com
+    clientid: <REPLACE_ME>
+    clientsecret: <REPLACE_ME>
+    url: <REPLACE_ME>
+    tokenurl: <REPLACE_ME>
