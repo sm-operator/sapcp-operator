@@ -130,6 +130,12 @@ func (r *ServiceBindingReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if serviceBinding.Status.BindingID == "" {
+		err := r.validateSecretNameIsAvailable(ctx, serviceBinding)
+		if err != nil {
+			setBlockedCondition(err.Error(), serviceBinding)
+			return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
+		}
+
 		binding, err := r.getBindingForRecovery(smClient, serviceBinding, log)
 		if binding == nil {
 			log.Info("getBindingForRecovery returned nil")
@@ -455,13 +461,12 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: k8sBinding.Spec.SecretName,
-			// TODO annotations? labels?
+			Name:      k8sBinding.Spec.SecretName,
+			Labels:    map[string]string{"binding": k8sBinding.Name},
 			Namespace: k8sBinding.Namespace,
 		},
 		Data: credentialsMap,
 	}
-
 	if err := controllerutil.SetControllerReference(k8sBinding, secret, r.Scheme); err != nil {
 		logger.Error(err, "Failed to set secret owner")
 		return err
@@ -469,14 +474,10 @@ func (r *ServiceBindingReconciler) storeBindingSecret(ctx context.Context, k8sBi
 
 	log.Info("Creating binding secret")
 	if err := r.Create(ctx, secret); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			if err = r.Update(ctx, secret); err != nil {
-				logger.Error(err, "Failed to store binding secret")
-				return err
-			}
+		if !apierrors.IsAlreadyExists(err) {
+			return err
 		}
 	}
-
 	return nil
 }
 
@@ -510,10 +511,10 @@ func (r *ServiceBindingReconciler) deleteBindingSecret(ctx context.Context, bind
 func (r *ServiceBindingReconciler) getBindingForRecovery(smClient smclient.Client, serviceBinding *v1alpha1.ServiceBinding, log logr.Logger) (*smclientTypes.ServiceBinding, error) {
 	parameters := smclient.Parameters{
 		FieldQuery: []string{
-			fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName)},
+			fmt.Sprintf("name eq '%s'", serviceBinding.Spec.ExternalName),
+			fmt.Sprintf("context/clusterid eq '%s'", r.Config.ClusterID),
+			fmt.Sprintf("context/namespace eq '%s'", serviceBinding.Namespace)},
 		LabelQuery: []string{
-			fmt.Sprintf("%s eq '%s'", clusterIDLabel, r.Config.ClusterID),
-			fmt.Sprintf("%s eq '%s'", namespaceLabel, serviceBinding.Namespace),
 			fmt.Sprintf("%s eq '%s'", k8sNameLabel, serviceBinding.Name)},
 		GeneralParams: []string{"attach_last_operations=true"},
 	}
@@ -549,4 +550,21 @@ func (r *ServiceBindingReconciler) removeBindingFromKubernetes(ctx context.Conte
 
 	// Stop reconciliation as the item is deleted
 	return ctrl.Result{}, nil
+}
+
+func (r *ServiceBindingReconciler) getSecret(ctx context.Context, namespace string, name string) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, secret)
+	return secret, err
+}
+
+func (r *ServiceBindingReconciler) validateSecretNameIsAvailable(ctx context.Context, binding *v1alpha1.ServiceBinding) error {
+	currentSecret, err := r.getSecret(ctx, binding.Namespace, binding.Spec.SecretName)
+	if err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if otherBindingName, ok := currentSecret.Labels["binding"]; otherBindingName != binding.Name || !ok {
+		return fmt.Errorf("secret %s belongs to another binding %s", binding.Spec.SecretName, otherBindingName)
+	}
+	return nil
 }

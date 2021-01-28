@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
+	"strings"
 )
 
 // +kubebuilder:docs-gen:collapse=Imports
@@ -246,6 +247,47 @@ var _ = Describe("ServiceBinding controller", func() {
 				It("should fail", func() {
 					createBindingWithBlockedError(context.Background(), bindingName, otherNamespace, instanceName, "",
 						fmt.Sprintf("unable to find service instance"))
+				})
+			})
+
+			When("secret name is already taken", func() {
+				ctx := context.Background()
+				JustBeforeEach(func() {
+					Expect(k8sClient.Create(ctx, &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "mysecret", Namespace: bindingTestNamespace}})).Should(Succeed())
+					By("Verify secret created")
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, types.NamespacedName{Name: "mysecret", Namespace: bindingTestNamespace}, &v1.Secret{})
+						return err == nil
+					}, timeout, interval).Should(BeTrue())
+				})
+				It("should fail the request and allow the user to replace secret name", func() {
+					binding := newBinding("newbinding", bindingTestNamespace)
+					binding.Spec.ServiceInstanceName = instanceName
+					binding.Spec.SecretName = "mysecret"
+
+					_ = k8sClient.Create(ctx, binding)
+					bindingLookupKey := types.NamespacedName{Name: binding.Name, Namespace: binding.Namespace}
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, bindingLookupKey, binding)
+						if err != nil {
+							return false
+						}
+						return isFailed(binding) && strings.Contains(binding.Status.Conditions[0].Message, "belongs to another binding")
+					}, timeout, interval).Should(BeTrue())
+
+					binding.Spec.SecretName = "mynewsecret"
+					Expect(k8sClient.Update(ctx, binding)).Should(Succeed())
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, bindingLookupKey, binding)
+						if err != nil {
+							return false
+						}
+						return isReady(binding)
+					}, timeout, interval).Should(BeTrue())
+
+					By("Verify binding secret created")
+					bindingSecret := getSecret(ctx, binding.Spec.SecretName, binding.Namespace)
+					Expect(bindingSecret).ToNot(BeNil())
 				})
 			})
 		})
@@ -647,10 +689,15 @@ var _ = Describe("ServiceBinding controller", func() {
 						createdBinding, err = createBindingWithoutAssertionsAndWait(context.Background(), bindingName, bindingTestNamespace, instanceName, "fake-binding-external-name", false)
 						Expect(err).ToNot(HaveOccurred())
 						smCallArgs := fakeClient.ListBindingsArgsForCall(0)
-						Expect(smCallArgs.LabelQuery).To(HaveLen(3))
-						Expect(smCallArgs.FieldQuery).To(HaveLen(1))
+						Expect(smCallArgs.LabelQuery).To(HaveLen(1))
+						Expect(smCallArgs.LabelQuery[0]).To(ContainSubstring("_k8sname"))
+
+						Expect(smCallArgs.FieldQuery).To(HaveLen(3))
+						Expect(smCallArgs.FieldQuery[0]).To(ContainSubstring("name"))
+						Expect(smCallArgs.FieldQuery[1]).To(ContainSubstring("context/clusterid"))
+						Expect(smCallArgs.FieldQuery[2]).To(ContainSubstring("context/namespace"))
+
 						Expect(createdBinding.Status.Conditions[0].Reason).To(Equal(getConditionReason(testCase.lastOpType, testCase.lastOpState)))
-						//TODO verify correct parameters used to find binding in SM are correct
 
 						switch testCase.lastOpState {
 						case smTypes.FAILED:

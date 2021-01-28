@@ -292,6 +292,7 @@ func setFailureConditions(operationType smTypes.OperationCategory, errorMessage 
 	object.SetConditions(conditions)
 }
 
+//blocked condition marks to the user that action from his side is required, this is considered as in progress operation
 func setBlockedCondition(message string, object servicesv1alpha1.SAPCPResource) {
 	conditions := object.GetConditions()
 	if len(conditions) > 0 {
