@@ -13,12 +13,12 @@ With the SAP Cloud Platform (SAP CP) Operator, you can provision and bind SAP CP
 * [Setting Up Operator](#setting-up-operator)
 * [Local Setup](#local-setup)
 * [SAP CP kubectl Extension](#sap-cp-kubectl-extension-experimental)
-* [Using the SAP CP Service Operator](#using-the-sapcp-service-operator)
+* [Using the SAP CP Service Operator](#using-the-sap-cp-service-operator)
     * [Creating a Service Instance](#step-1-creating-a-service-instance)
     * [Binding a Service Instance](#step-2-binding-a-service-instance)
 * [Reference Documentation](#reference-documentation)
     * [Service Instance Properties](#service-instance-properties)
-    * [Binding Properties](#service-binding-properties)    
+    * [Service Binding Properties](#service-binding-properties)    
 
 ## Prerequisites
 - SAP Cloud Platform [Global Account](https://help.sap.com/viewer/65de2977205c403bbc107264b8eccf4b/Cloud/en-US/d61c2819034b48e68145c45c36acba6e.html) and [Subaccount](https://help.sap.com/viewer/65de2977205c403bbc107264b8eccf4b/Cloud/en-US/55d0b6d8b96846b8ae93b85194df0944.html) 
