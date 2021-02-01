@@ -1,8 +1,9 @@
-package v1alpha1
+package tests
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"testing"
@@ -13,8 +14,8 @@ func TestServer(t *testing.T) {
 	RunSpecs(t, "SAPCP Resource Suite")
 }
 
-func getBinding() *ServiceBinding {
-	return &ServiceBinding{
+func getBinding() *v1alpha1.ServiceBinding {
+	return &v1alpha1.ServiceBinding{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "services.cloud.sap.com/v1alpha1",
 			Kind:       "ServiceBinding",
@@ -23,18 +24,18 @@ func getBinding() *ServiceBinding {
 			Name:      "service-binding-1",
 			Namespace: "namespace-1",
 		},
-		Spec: ServiceBindingSpec{
+		Spec: v1alpha1.ServiceBindingSpec{
 			ServiceInstanceName: "service-instance-1",
 			ExternalName:        "my-service-binding-1",
 			Parameters:          &runtime.RawExtension{Raw: []byte(`{"key":"val"}`)},
 		},
 
-		Status: ServiceBindingStatus{},
+		Status: v1alpha1.ServiceBindingStatus{},
 	}
 }
 
-func getInstance() *ServiceInstance {
-	return &ServiceInstance{
+func getInstance() *v1alpha1.ServiceInstance {
+	return &v1alpha1.ServiceInstance{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "services.cloud.sap.com/v1alpha1",
 			Kind:       "ServiceInstance",
@@ -43,7 +44,7 @@ func getInstance() *ServiceInstance {
 			Name:      "service-instance-1",
 			Namespace: "namespace-1",
 		},
-		Spec: ServiceInstanceSpec{
+		Spec: v1alpha1.ServiceInstanceSpec{
 			ServiceOfferingName: "service-offering-1",
 			ServicePlanName:     "service-plan-name-1",
 			ServicePlanID:       "service-plan-id-1",
@@ -51,6 +52,6 @@ func getInstance() *ServiceInstance {
 			Parameters:          &runtime.RawExtension{Raw: []byte(`{"key":"val"}`)},
 		},
 
-		Status: ServiceInstanceStatus{},
+		Status: v1alpha1.ServiceInstanceStatus{},
 	}
 }

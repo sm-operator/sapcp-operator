@@ -1,13 +1,14 @@
-package v1alpha1
+package tests
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var _ = Describe("Service Binding Webhook Test", func() {
-	var binding *ServiceBinding
+	var binding *v1alpha1.ServiceBinding
 	BeforeEach(func() {
 		binding = getBinding()
 	})
@@ -42,7 +43,7 @@ var _ = Describe("Service Binding Webhook Test", func() {
 		})
 
 		Context("Validate update of spec before binding is created (failure recovery)", func() {
-			var newBinding *ServiceBinding
+			var newBinding *v1alpha1.ServiceBinding
 
 			BeforeEach(func() {
 				newBinding = getBinding()
@@ -93,7 +94,7 @@ var _ = Describe("Service Binding Webhook Test", func() {
 		})
 
 		Context("Validate update of spec after binding is created", func() {
-			var newBinding *ServiceBinding
+			var newBinding *v1alpha1.ServiceBinding
 			BeforeEach(func() {
 				newBinding = getBinding()
 				newBinding.Status.BindingID = "1234"

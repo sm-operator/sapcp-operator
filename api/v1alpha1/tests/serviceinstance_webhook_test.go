@@ -1,12 +1,13 @@
-package v1alpha1
+package tests
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 )
 
 var _ = Describe("Service Binding Webhook Test", func() {
-	var instance *ServiceInstance
+	var instance *v1alpha1.ServiceInstance
 	BeforeEach(func() {
 		instance = getInstance()
 	})
