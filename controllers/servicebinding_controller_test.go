@@ -119,7 +119,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		Expect(createdBinding.Status.BindingID).To(Equal(fakeBindingID))
 		Expect(createdBinding.Spec.SecretName).To(Not(BeEmpty()))
 		Expect(int(createdBinding.Status.ObservedGeneration)).To(Equal(1))
-
+		Expect(string(createdBinding.Spec.Parameters.Raw)).To(ContainSubstring("\"key\":\"value\""))
 		return createdBinding
 	}
 
