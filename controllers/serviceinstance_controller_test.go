@@ -187,7 +187,7 @@ var _ = Describe("ServiceInstance controller", func() {
 
 		Context("Sync", func() {
 			When("provision request to SM succeeds", func() {
-				FIt("should provision instance of the provided offering and plan name successfully", func() {
+				It("should provision instance of the provided offering and plan name successfully", func() {
 					serviceInstance = createInstance(ctx, instanceSpec)
 					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 					Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
