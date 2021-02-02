@@ -60,6 +60,7 @@ spec:
               parameters:
                 description: Parameters for the binding
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               secretName:
                 description: SecretName is the name of the secret where credentials
                   will be stored

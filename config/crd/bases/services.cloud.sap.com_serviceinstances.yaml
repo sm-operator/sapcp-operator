@@ -63,6 +63,7 @@ spec:
               parameters:
                 description: Provisioning parameters for the instance
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               serviceOfferingName:
                 description: The name of the service offering
                 minLength: 1

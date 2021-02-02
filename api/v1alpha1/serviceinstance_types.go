@@ -47,6 +47,7 @@ type ServiceInstanceSpec struct {
 
 	// Provisioning parameters for the instance
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Parameters *runtime.RawExtension `json:"parameters,omitempty"`
 }
 
