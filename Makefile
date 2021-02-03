@@ -17,7 +17,7 @@ ifeq ($(shell go env GOOS),darwin)
 SED = sed -i ''
 endif
 
-GO_TEST = go test ./... -coverpkg=$(go list ./... | egrep -v "fakes|test" | paste -sd "," -) -coverprofile=$(TEST_PROFILE) -ginkgo.flakeAttempts=3
+GO_TEST = go test ./... -coverpkg=$(go list ./... | egrep -v "fakes|test|types" | paste -sd "," -) -coverprofile=$(TEST_PROFILE) -ginkgo.flakeAttempts=3
 
 
 all: manager
