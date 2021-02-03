@@ -87,7 +87,7 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 	}
 
 	secretData := secret.Data
-	cl, err := smclient.NewClient(ctx, &smclient.ClientConfig{
+	cl := smclient.NewClient(ctx, &smclient.ClientConfig{
 		ClientID:     string(secretData["clientid"]),
 		ClientSecret: string(secretData["clientsecret"]),
 		URL:          string(secretData["url"]),
@@ -95,14 +95,6 @@ func (r *BaseReconciler) getSMClient(ctx context.Context, log logr.Logger, objec
 		SSLDisabled:  false,
 	}, nil)
 
-	if err != nil {
-		log.Error(err, "Failed to initialize SM client")
-		setFailureConditions(smTypes.CREATE, fmt.Sprintf("failed to create service-manager client: %s", err.Error()), object)
-		if err := r.updateStatusWithRetries(ctx, object, log); err != nil {
-			return nil, err
-		}
-		return nil, err
-	}
 	return cl, nil
 }
 

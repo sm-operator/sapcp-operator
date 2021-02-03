@@ -550,7 +550,7 @@ var _ = Describe("Client test", func() {
 
 			Context("When invalid config is set", func() {
 				It("should return error", func() {
-					client, _ = NewClient(context.TODO(), &ClientConfig{URL: "invalidURL"}, fakeAuthClient)
+					client = NewClient(context.TODO(), &ClientConfig{URL: "invalidURL"}, fakeAuthClient)
 					_, location, err := client.UpdateInstance(instance.ID, instance, serviceName, planName, params)
 
 					Expect(err).Should(HaveOccurred())
@@ -803,7 +803,7 @@ var _ = Describe("Client test", func() {
 
 			Context("When invalid config is set", func() {
 				It("should return error", func() {
-					client, _ = NewClient(context.TODO(), &ClientConfig{URL: "invalidURL"}, fakeAuthClient)
+					client = NewClient(context.TODO(), &ClientConfig{URL: "invalidURL"}, fakeAuthClient)
 					_, location, err := client.Bind(binding, params)
 
 					Expect(err).Should(HaveOccurred())

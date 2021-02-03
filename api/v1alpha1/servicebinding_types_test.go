@@ -51,4 +51,19 @@ var _ = Describe("Service Binding Type Test", func() {
 		Expect(list).To(Equal(clonedList))
 	})
 
+	It("should return controller name", func() {
+		Expect(binding.GetControllerName()).To(Equal(ServiceBindingController))
+	})
+
+	It("should update observed generation", func() {
+		Expect(binding.Status.ObservedGeneration).To(Equal(int64(0)))
+		binding.SetObservedGeneration(2)
+		Expect(binding.Status.ObservedGeneration).To(Equal(int64(2)))
+	})
+
+	It("should update status", func() {
+		status := ServiceBindingStatus{BindingID: "1234"}
+		binding.SetStatus(status)
+		Expect(binding.GetStatus()).To(Equal(status))
+	})
 })

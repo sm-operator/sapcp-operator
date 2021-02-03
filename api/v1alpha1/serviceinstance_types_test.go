@@ -50,4 +50,20 @@ var _ = Describe("Service Instance Type Test", func() {
 		list.DeepCopyInto(clonedList)
 		Expect(list).To(Equal(clonedList))
 	})
+
+	It("should return controller name", func() {
+		Expect(instance.GetControllerName()).To(Equal(ServiceInstanceController))
+	})
+
+	It("should update observed generation", func() {
+		Expect(instance.Status.ObservedGeneration).To(Equal(int64(0)))
+		instance.SetObservedGeneration(2)
+		Expect(instance.Status.ObservedGeneration).To(Equal(int64(2)))
+	})
+
+	It("should update status", func() {
+		status := ServiceInstanceStatus{InstanceID: "1234"}
+		instance.SetStatus(status)
+		Expect(instance.GetStatus()).To(Equal(status))
+	})
 })

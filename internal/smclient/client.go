@@ -77,9 +77,9 @@ type serviceManagerClient struct {
 }
 
 // NewClientWithAuth returns new SM Client configured with the provided configuration
-func NewClient(ctx context.Context, config *ClientConfig, httpClient auth.HTTPClient) (Client, error) {
+func NewClient(ctx context.Context, config *ClientConfig, httpClient auth.HTTPClient) Client {
 	if httpClient != nil {
-		return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}, nil
+		return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: httpClient}
 	}
 	ccConfig := &clientcredentials.Config{
 		ClientID:     config.ClientID,
@@ -89,7 +89,7 @@ func NewClient(ctx context.Context, config *ClientConfig, httpClient auth.HTTPCl
 	}
 
 	authClient := auth.NewAuthClient(ccConfig, config.SSLDisabled)
-	return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: authClient}, nil
+	return &serviceManagerClient{Context: ctx, Config: config, HTTPClient: authClient}
 }
 
 // Provision provisions a new service instance in service manager
