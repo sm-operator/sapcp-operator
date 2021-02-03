@@ -351,6 +351,26 @@ var _ = Describe("ServiceBinding controller", func() {
 					})
 
 				})
+
+				When("SM returned invalid credentials json", func() {
+					BeforeEach(func() {
+						fakeClient.BindReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, Credentials: json.RawMessage("\"invalidjson\": \"secret_value\"")}, "", nil)
+
+					})
+					It("creation will fail with appropriate message", func() {
+						ctx := context.Background()
+						var err error
+						createdBinding, err = createBindingWithoutAssertions(ctx, bindingName, bindingTestNamespace, instanceName, "")
+						Expect(err).To(BeNil())
+						Eventually(func() bool {
+							err := k8sClient.Get(context.Background(), types.NamespacedName{Name: bindingName, Namespace: bindingTestNamespace}, createdBinding)
+							if err != nil {
+								return false
+							}
+							return isFailed(createdBinding) && strings.Contains(createdBinding.Status.Conditions[0].Message, "failed to store binding secret")
+						}, timeout, interval).Should(BeTrue())
+					})
+				})
 			})
 
 			Context("Async", func() {
@@ -486,7 +506,6 @@ var _ = Describe("ServiceBinding controller", func() {
 				})
 			})
 		})
-
 	})
 
 	Context("Update", func() {
