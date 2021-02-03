@@ -11,7 +11,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var _ = Describe("ServiceBinding controller", func() {
+const managementNamespace = "test-management-namespace"
+
+var _ = Describe("Base controller", func() {
 	var serviceInstance *v1alpha1.ServiceInstance
 	var fakeInstanceName string
 	var ctx context.Context
@@ -24,7 +26,7 @@ var _ = Describe("ServiceBinding controller", func() {
 		//defaultLookupKey = types.NamespacedName{Name: fakeInstanceName, Namespace: testNamespace}
 
 		resolver := &secrets.SecretResolver{
-			ManagementNamespace: "managementNamespace",
+			ManagementNamespace: managementNamespace,
 			Log:                 logf.Log.WithName("SecretResolver"),
 			Client:              k8sClient,
 		}
@@ -37,7 +39,7 @@ var _ = Describe("ServiceBinding controller", func() {
 	})
 
 	When("SM secret not exists", func() {
-		It("Should fail with blocked condition", func() {
+		It("Should fail with failure condition", func() {
 			serviceInstance = &v1alpha1.ServiceInstance{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "services.cloud.sap.com/v1alpha1",
