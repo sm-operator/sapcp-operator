@@ -60,10 +60,12 @@ var _ = Describe("Base controller", func() {
 	})
 
 	When("SM secret is valid", func() {
+		var namespace *corev1.Namespace
+		var secret *corev1.Secret
 		BeforeEach(func() {
-			namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: managementNamespace}}
+			namespace = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: managementNamespace}}
 			Expect(k8sClient.Create(context.Background(), namespace)).Should(Succeed())
-			secretWithoutClientID := &corev1.Secret{
+			secret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      secrets.SAPCPOperatorSecretName,
 					Namespace: managementNamespace,
@@ -75,7 +77,11 @@ var _ = Describe("Base controller", func() {
 					"tokenurl":     []byte("https://token.url"),
 				},
 			}
-			Expect(k8sClient.Create(ctx, secretWithoutClientID)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+		})
+		AfterEach(func() {
+			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, namespace)).Should(Succeed())
 		})
 		It("Should succeed", func() {
 			client, err := controller.getSMClient(ctx, controller.Log, serviceInstance)
