@@ -45,6 +45,7 @@ type ServiceBindingSpec struct {
 
 	// Parameters for the binding
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Parameters *runtime.RawExtension `json:"parameters,omitempty"`
 }
 

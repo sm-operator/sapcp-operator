@@ -14,6 +14,7 @@ import (
 	smclientTypes "github.com/sm-operator/sapcp-operator/internal/smclient/types"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
 	"strings"
@@ -39,6 +40,9 @@ var _ = Describe("ServiceInstance controller", func() {
 		ExternalName:        fakeInstanceExternalName,
 		ServicePlanName:     fakePlanName,
 		ServiceOfferingName: fakeOfferingName,
+		Parameters: &runtime.RawExtension{
+			Raw: []byte(`{"key": "value"}`),
+		},
 	}
 
 	createInstance := func(ctx context.Context, instanceSpec v1alpha1.ServiceInstanceSpec) *v1alpha1.ServiceInstance {
@@ -188,6 +192,8 @@ var _ = Describe("ServiceInstance controller", func() {
 					Expect(serviceInstance.Status.InstanceID).To(Equal(fakeInstanceID))
 					Expect(serviceInstance.Spec.ExternalName).To(Equal(fakeInstanceExternalName))
 					Expect(serviceInstance.Name).To(Equal(fakeInstanceName))
+					Expect(string(serviceInstance.Spec.Parameters.Raw)).To(ContainSubstring("\"key\":\"value\""))
+
 				})
 			})
 
