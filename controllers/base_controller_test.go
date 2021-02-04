@@ -8,7 +8,9 @@ import (
 	"github.com/sm-operator/sapcp-operator/api/v1alpha1"
 	"github.com/sm-operator/sapcp-operator/internal/secrets"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -81,6 +83,10 @@ var _ = Describe("Base controller", func() {
 		})
 		AfterEach(func() {
 			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, secret)
+				return apierrors.IsNotFound(err)
+			}, timeout, interval).Should(BeTrue())
 			Expect(k8sClient.Delete(ctx, namespace)).Should(Succeed())
 		})
 		It("Should succeed", func() {
