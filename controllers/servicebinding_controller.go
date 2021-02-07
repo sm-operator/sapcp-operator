@@ -180,6 +180,14 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 		return r.markAsNonTransientError(ctx, smTypes.CREATE, err.Error(), serviceBinding, log)
 	}
 
+	if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
+		setFailureConditions(smTypes.CREATE, err.Error(), serviceBinding)
+		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, err
+	}
+
 	smBinding, operationURL, bindErr := smClient.Bind(&smclientTypes.ServiceBinding{
 		Name: serviceBinding.Spec.ExternalName,
 		Labels: smTypes.Labels{
@@ -197,14 +205,6 @@ func (r *ServiceBindingReconciler) createBinding(ctx context.Context, smClient s
 			return r.markAsTransientError(ctx, smTypes.CREATE, bindErr.Error(), serviceBinding, log)
 		}
 		return r.markAsNonTransientError(ctx, smTypes.CREATE, bindErr.Error(), serviceBinding, log)
-	}
-
-	if err := r.SetOwner(ctx, serviceInstance, serviceBinding, log); err != nil {
-		setFailureConditions(smTypes.CREATE, "", serviceBinding)
-		if err := r.updateStatusWithRetries(ctx, serviceBinding, log); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
 	}
 
 	if operationURL != "" {
