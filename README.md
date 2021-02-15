@@ -193,20 +193,20 @@ With the SAP BTP Operator, you can manage SAP BTP services from your Kubernetes 
 
 ## Support
 Feel free to open new issues for feature requests, bugs, or general feedback on this project's GitHub Issues page. 
-The SAP CP Service Operator project maintainers will respond to the best of their abilities. 
+The SAP BTP Service Operator project maintainers will respond to the best of their abilities. 
 
 ## Contributions
 We currently do not accept community contributions. 
 
 ## SAP CP kubectl Extension (Experimental) 
-The SAP CP kubectl plugin extends kubectl with commands for getting the available services in your SAP BTP account, 
+The SAP BTP kubectl plugin extends kubectl with commands for getting the available services in your SAP BTP account, 
 using the access credentials stored in the cluster.
 
 ### Prerequisites
 - [jq](https://stedolan.github.io/jq/)
 
 ### Limitations
-- The SAP CP kubectl plugin is currently based on `bash`. If using Windows, you should use the SAP BTP plugin commands from a Linux shell (e.g. [Cygwin](https://www.cygwin.com/)).  
+- The SAP BTP kubectl plugin is currently based on `bash`. If using Windows, you should use the SAP BTP plugin commands from a Linux shell (e.g. [Cygwin](https://www.cygwin.com/)).  
 
 ### Installation
 - Download https://github.com/sm-operator/sapcp-operator/releases/download/${release}/kubectl-sapcp
