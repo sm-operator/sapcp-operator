@@ -324,7 +324,8 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, smClient smclient.C
 	}
 
 	if status == nil {
-		return ctrl.Result{}, fmt.Errorf("status is nil")
+		setFailureConditions(smTypes.DELETE, "keren", serviceBinding)
+		return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
 	}
 	switch status.State {
 	case string(smTypes.IN_PROGRESS):
