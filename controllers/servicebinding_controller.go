@@ -323,6 +323,9 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, smClient smclient.C
 		return ctrl.Result{}, statusErr
 	}
 
+	if status == nil {
+		return ctrl.Result{}, fmt.Errorf("status is nil")
+	}
 	switch status.State {
 	case string(smTypes.IN_PROGRESS):
 		fallthrough
