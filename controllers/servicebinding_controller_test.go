@@ -399,7 +399,7 @@ var _ = Describe("ServiceBinding controller", func() {
 					JustBeforeEach(func() {
 						fakeClient.BindReturns(nil, "/v1/service_bindings/id/operations/1234", nil)
 						fakeClient.StatusReturnsOnCall(0, nil, fmt.Errorf("no polling for you"))
-						fakeClient.StatusReturnsOnCall(1, &smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.SUCCEEDED)}, nil)
+						fakeClient.StatusReturnsOnCall(1, &smclientTypes.Operation{ResourceID: fakeBindingID, State: string(smTypes.SUCCEEDED), Type: string(smTypes.CREATE)}, nil)
 						fakeClient.GetBindingByIDReturns(&smclientTypes.ServiceBinding{ID: fakeBindingID, LastOperation: &smTypes.Operation{State: smTypes.SUCCEEDED, Type: smTypes.CREATE}}, nil)
 					})
 					It("should eventually succeed", func() {
