@@ -3,6 +3,10 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/sm-operator/sapcp-operator/blob/master/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sm-operator/sapcp-operator)](https://goreportcard.com/report/github.com/sm-operator/sapcp-operator)
 
+# DEPRECATED
+moved to https://github.com/SAP/sap-btp-service-operator
+
+
 # SAP Cloud Platform Service Operator
 
 
