@@ -329,6 +329,7 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, smClient smclient.C
 	case string(smTypes.PENDING):
 		return ctrl.Result{Requeue: true, RequeueAfter: r.Config.PollInterval}, nil
 	case string(smTypes.FAILED):
+		//non transient error - should not retry
 		setFailureConditions(smTypes.OperationCategory(status.Type), status.Description, serviceBinding)
 		if serviceBinding.Status.OperationType == smTypes.DELETE {
 			serviceBinding.Status.OperationURL = ""
