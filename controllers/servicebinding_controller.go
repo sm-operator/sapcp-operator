@@ -324,8 +324,8 @@ func (r *ServiceBindingReconciler) poll(ctx context.Context, smClient smclient.C
 	}
 
 	if status == nil {
-		setFailureConditions(smTypes.DELETE, "keren", serviceBinding)
-		return ctrl.Result{}, r.updateStatusWithRetries(ctx, serviceBinding, log)
+		setFailureConditions(serviceBinding.Status.OperationType, "failed to get last operation status", serviceBinding)
+		return ctrl.Result{Requeue: true}, r.updateStatusWithRetries(ctx, serviceBinding, log)
 	}
 	switch status.State {
 	case string(smTypes.IN_PROGRESS):
