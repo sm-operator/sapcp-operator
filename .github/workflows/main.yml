@@ -1,22 +1,27 @@
-# This is a basic workflow to help you get started with Actions
 
-name: CI
+
+name: Release
 
 # Controls when the action will run. 
 on:
   workflow_dispatch:
     inputs:
-      logLevel:
-        description: 'Log level'     
+      bump_type:
+        description: 'bump type (major, minor, patch)'     
         required: true
-        default: 'warning'
-      tags:
-        description: 'Test scenario tags'
-                
+        default: 'patch'
+                     
 jobs:
-  printInputs:
+  manage_release_job:
     runs-on: ubuntu-latest
+    name: Generate release
     steps:
-    - run: |
-        echo "Log level: ${{ github.event.inputs.logLevel }}"
-        echo "Tags: ${{ github.event.inputs.tags }}"     
+    - name: Generate release
+      id: release
+      uses: home-furnishing-nordic/semver-release-manager@master
+      with:
+        github_token: "${{ secrets.GITHUB_TOKEN }}"
+        bump_type: ${{ github.event.inputs.bump_type }}
+    # Use the output from the `release` step
+    - name: Get the output time
+      run: echo "Execution time ${{ steps.release.outputs.time }}"
